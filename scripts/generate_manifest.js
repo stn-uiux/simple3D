@@ -12,8 +12,8 @@ const outputFile = path.join(rootDir, 'src', 'material_manifest.json');
 
 try {
   if (!fs.existsSync(materialsDir)) {
-    console.log('Materials directory not found at:', materialsDir);
-    process.exit(1);
+    console.log('Materials directory not found. Creating:', materialsDir);
+    fs.mkdirSync(materialsDir, { recursive: true });
   }
 
   const files = fs.readdirSync(materialsDir)

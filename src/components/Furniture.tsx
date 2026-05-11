@@ -1096,7 +1096,7 @@ export const Furniture = React.memo(({
       Critical: { color: '#ff0000', label: 'Critical', intensity: 4.5 },
       Major: { color: '#ea580c', label: 'Major', intensity: 2.5 },
       Minor: { color: '#fde047', label: 'Minor', intensity: 0.3 },
-      Warning: { color: '#0084ffff', label: 'Warning', intensity: 1.2 },
+      Warning: { color: '#0084ff', label: 'Warning', intensity: 1.2 },
       Normal: { color: '#3fc026', label: 'Normal', intensity: 0.5 }
     };
 
