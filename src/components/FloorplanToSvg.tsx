@@ -3046,6 +3046,8 @@ ${pathsSvg}
                           const bounds = getSelectionBounds();
                           if (!bounds) return null;
                           const pathId = Array.from(selectedPathIds)[0];
+                          const firstPath = svgPaths.find(p => p.id === pathId);
+                          if (!firstPath) return null;
                           return (
                             <div className="space-y-1.5 p-3 bg-white/5 border border-white/10 rounded-xl">
                               <span className="text-[10px] font-black uppercase tracking-widest text-teal-500/60 block mb-2">{t('Layer Transform', '레이어 크기/위치')}</span>
@@ -3065,6 +3067,82 @@ ${pathsSvg}
                                 <div>
                                   <span className="text-[9px] text-white/40 block mb-1">Height</span>
                                   <input type="number" value={Math.round(bounds.h)} onChange={e => { const val = parseFloat(e.target.value); if (!isNaN(val) && val > 0) applyPathTransform(pathId, bounds.x, bounds.y, bounds.w, val); }} className="w-full bg-black/60 border border-white/10 rounded px-2 py-1 text-xs text-white" />
+                                </div>
+                                <div className="col-span-2">
+                                  <span className="text-[9px] text-white/40 block mb-1">{t('Rotation (deg)', '회전 (도)')}</span>
+                                  <div className="flex items-center gap-2">
+                                    <input 
+                                      type="number" 
+                                      value={Math.round(firstPath.rotation || 0)} 
+                                      onChange={e => { 
+                                        const val = parseFloat(e.target.value); 
+                                        if (!isNaN(val)) {
+                                          const center = { x: bounds.x + bounds.w / 2, y: bounds.y + bounds.h / 2 };
+                                          const deltaDeg = val - (firstPath.rotation || 0);
+                                          const cos = Math.cos((deltaDeg * Math.PI) / 180);
+                                          const sin = Math.sin((deltaDeg * Math.PI) / 180);
+                                          
+                                          setSvgPaths(prev => {
+                                            const np = prev.map(p => {
+                                              if (p.id !== pathId) return p;
+                                              return {
+                                                ...p,
+                                                rotation: val,
+                                                subPaths: p.subPaths.map(pts => pts.map(pt => {
+                                                  const rx = pt.x - center.x;
+                                                  const ry = pt.y - center.y;
+                                                  const nPt: Point = {
+                                                    x: rx * cos - ry * sin + center.x,
+                                                    y: rx * sin + ry * cos + center.y
+                                                  };
+                                                  if (pt.bezier) {
+                                                    nPt.bezier = {
+                                                      cx1: (pt.bezier.cx1 - center.x) * cos - (pt.bezier.cy1 - center.y) * sin + center.x,
+                                                      cy1: (pt.bezier.cx1 - center.x) * sin + (pt.bezier.cy1 - center.y) * cos + center.y,
+                                                      cx2: (pt.bezier.cx2 - center.x) * cos - (pt.bezier.cy2 - center.y) * sin + center.x,
+                                                      cy2: (pt.bezier.cx2 - center.x) * sin + (pt.bezier.cy2 - center.y) * cos + center.y,
+                                                    };
+                                                  }
+                                                  return nPt;
+                                                }))
+                                              };
+                                            });
+                                            latestPathsRef.current = np;
+                                            return np;
+                                          });
+                                        }
+                                      }}
+                                      onBlur={() => commitChange(svgPaths)}
+                                      className="flex-1 bg-black/60 border border-white/10 rounded px-2 py-1 text-xs text-white" 
+                                    />
+                                    <button onClick={() => {
+                                      const center = { x: bounds.x + bounds.w / 2, y: bounds.y + bounds.h / 2 };
+                                      const deltaDeg = - (firstPath.rotation || 0);
+                                      const cos = Math.cos((deltaDeg * Math.PI) / 180);
+                                      const sin = Math.sin((deltaDeg * Math.PI) / 180);
+                                      setSvgPaths(prev => {
+                                        const np = prev.map(p => p.id === pathId ? {
+                                          ...p, rotation: 0,
+                                          subPaths: p.subPaths.map(pts => pts.map(pt => {
+                                            const rx = pt.x - center.x; const ry = pt.y - center.y;
+                                            const nPt: Point = { x: rx * cos - ry * sin + center.x, y: rx * sin + ry * cos + center.y };
+                                            if (pt.bezier) {
+                                              nPt.bezier = {
+                                                cx1: (pt.bezier.cx1 - center.x) * cos - (pt.bezier.cy1 - center.y) * sin + center.x,
+                                                cy1: (pt.bezier.cx1 - center.x) * sin + (pt.bezier.cy1 - center.y) * cos + center.y,
+                                                cx2: (pt.bezier.cx2 - center.x) * cos - (pt.bezier.cy2 - center.y) * sin + center.x,
+                                                cy2: (pt.bezier.cx2 - center.x) * sin + (pt.bezier.cy2 - center.y) * cos + center.y,
+                                              };
+                                            }
+                                            return nPt;
+                                          }))
+                                        } : p);
+                                        latestPathsRef.current = np;
+                                        commitChange(np);
+                                        return np;
+                                      });
+                                    }} className="p-1 rounded bg-white/5 hover:bg-white/10 text-white/40 hover:text-white transition-all"><RefreshCw size={12} /></button>
+                                  </div>
                                 </div>
                               </div>
                             </div>
@@ -3399,6 +3477,37 @@ ${pathsSvg}
                                   fill="none" stroke={ACCENT_400} strokeWidth={1 / zoom} strokeDasharray={`${4 / zoom} ${4 / zoom}`}
                                   pointerEvents="none"
                                 />
+
+                                {/* Main Top Rotation Handle */}
+                                <line 
+                                  x1={localBounds.x + localBounds.w / 2} y1={localBounds.y} 
+                                  x2={localBounds.x + localBounds.w / 2} y2={localBounds.y - 25 / zoom} 
+                                  stroke={ACCENT_400} strokeWidth={1 / zoom}
+                                />
+                                <circle
+                                  cx={localBounds.x + localBounds.w / 2} cy={localBounds.y - 25 / zoom} r={6 / zoom}
+                                  fill="white" stroke={ACCENT_400} strokeWidth={1.5 / zoom}
+                                  className="cursor-pointer"
+                                  onMouseDown={(e) => {
+                                    if (e.button !== 0) return;
+                                    e.stopPropagation();
+                                    const svg = e.currentTarget.ownerSVGElement;
+                                    if (!svg) return;
+                                    const pt = svg.createSVGPoint();
+                                    pt.x = e.clientX; pt.y = e.clientY;
+                                    const ctm = svg.getScreenCTM()?.inverse();
+                                    if (ctm) {
+                                      const svgPt = pt.matrixTransform(ctm);
+                                      const center = { x: bounds.x + bounds.w / 2, y: bounds.y + bounds.h / 2 };
+                                      rotatingCenterRef.current = center;
+                                      rotatingStartAngleRef.current = Math.atan2(svgPt.y - center.y, svgPt.x - center.x);
+                                      setRotatingLayer(pathId);
+                                      dragInitialPathsRef.current = JSON.parse(JSON.stringify(svgPaths));
+                                    }
+                                  }}
+                                />
+
+                                {/* Invisible Corner Rotation Areas */}
                                 {rotHandles.map(h => (
                                   <circle
                                     key={`rot-${h.id}`}
