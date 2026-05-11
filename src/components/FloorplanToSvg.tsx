@@ -812,6 +812,7 @@ export const FloorplanToSvg: React.FC<FloorplanToSvgProps> = ({ isOpen, onClose,
   const [rotatingLayer, setRotatingLayer] = useState<string | null>(null);
   const rotatingCenterRef = useRef<{ x: number; y: number } | null>(null);
   const rotatingStartAngleRef = useRef<number>(0);
+  const svgRef = useRef<SVGSVGElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
   const [showLayersHelp, setShowLayersHelp] = useState(false);
 
@@ -856,6 +857,25 @@ export const FloorplanToSvg: React.FC<FloorplanToSvgProps> = ({ isOpen, onClose,
       setSelectedPoints(new Set());
     }
   }, []);
+
+  // Global Mouse Listeners for drag operations (rotation, move, etc.)
+  useEffect(() => {
+    const isAnyDragging = rotatingLayer || draggingLayer || resizingLayer || draggingPoint || draggingCornerRadius || rectDraw || selectionBox || isPanning;
+    if (isAnyDragging) {
+      const handleGlobalMove = (e: MouseEvent) => {
+        handleSvgMouseMove(e as any);
+      };
+      const handleGlobalUp = (e: MouseEvent) => {
+        handleSvgMouseUp(e as any);
+      };
+      window.addEventListener('mousemove', handleGlobalMove);
+      window.addEventListener('mouseup', handleGlobalUp);
+      return () => {
+        window.removeEventListener('mousemove', handleGlobalMove);
+        window.removeEventListener('mouseup', handleGlobalUp);
+      };
+    }
+  }, [rotatingLayer, draggingLayer, resizingLayer, draggingPoint, draggingCornerRadius, rectDraw, selectionBox, isPanning]);
 
   // Sync state to parent for persistence
   useEffect(() => {
@@ -1633,9 +1653,10 @@ ${pathsSvg}
     }
   }, [editMode, svgPaths, zoom, selectedPoints, isSpacePressed, drawTool]);
 
-  const handleSvgMouseMove = useCallback((e: React.MouseEvent<SVGSVGElement>) => {
+  const handleSvgMouseMove = useCallback((e: React.MouseEvent<SVGSVGElement> | MouseEvent) => {
     const isAlt = e.altKey;
-    const svg = e.currentTarget;
+    const svg = svgRef.current;
+    if (!svg) return;
     const pt = svg.createSVGPoint();
     pt.x = e.clientX; pt.y = e.clientY;
     const ctm = svg.getScreenCTM()?.inverse();
@@ -2157,7 +2178,11 @@ ${pathsSvg}
     }
   }, [editMode, draggingPoint, selectedPathId, selectedPoints, selectionBox, isPanning, svgPaths, zoom, rectDraw, resizingLayer, draggingLayer, selectedPathIds, draggingCornerRadius, rotatingLayer]);
 
-  const handleSvgMouseUp = useCallback(() => {
+  const handleSvgMouseUp = useCallback((e?: React.MouseEvent | MouseEvent) => {
+    if (isPanning) {
+      setIsPanning(false);
+      panStartRef.current = null;
+    }
     setTimeout(() => { ignoreClickRef.current = false; }, 100);
 
     if (draggingLayer) {
@@ -2241,7 +2266,29 @@ ${pathsSvg}
     setPerpPoint(null);
     dragStartRef.current = null;
     panStartRef.current = null;
-  }, [selectionBox, selectedPoints, highlightedPoints, draggingPoint, commitChange, rectDraw, svgPaths, draggingLayer, resizingLayer, draggingCornerRadius, rotatingLayer]);
+  }, [selectionBox, selectedPoints, highlightedPoints, draggingPoint, commitChange, rectDraw, svgPaths, draggingLayer, resizingLayer, draggingCornerRadius, rotatingLayer, isPanning]);
+
+  // Global listeners for mouse move/up in case they go outside SVG
+  useEffect(() => {
+    const handleGlobalMouseMove = (e: MouseEvent) => {
+        if (isPanning && panStartRef.current) {
+            const dx = e.clientX - panStartRef.current.x;
+            const dy = e.clientY - panStartRef.current.y;
+            setPan(p => ({ x: p.x + dx, y: p.y + dy }));
+            panStartRef.current = { x: e.clientX, y: e.clientY };
+        }
+        // Additional drag logic handled by standard mouseMove
+    };
+    const handleGlobalMouseUp = (e: MouseEvent) => {
+        if (isPanning) handleSvgMouseUp(e);
+    };
+    window.addEventListener('mousemove', handleGlobalMouseMove);
+    window.addEventListener('mouseup', handleGlobalMouseUp);
+    return () => {
+        window.removeEventListener('mousemove', handleGlobalMouseMove);
+        window.removeEventListener('mouseup', handleGlobalMouseUp);
+    };
+  }, [isPanning, handleSvgMouseUp]);
 
   const handleWheel = useCallback((e: React.WheelEvent) => {
     if (step === 'upload') return;
@@ -3046,6 +3093,8 @@ ${pathsSvg}
                           const bounds = getSelectionBounds();
                           if (!bounds) return null;
                           const pathId = Array.from(selectedPathIds)[0];
+                          const firstPath = svgPaths.find(p => p.id === pathId);
+                          if (!firstPath) return null;
                           return (
                             <div className="space-y-1.5 p-3 bg-white/5 border border-white/10 rounded-xl">
                               <span className="text-[10px] font-black uppercase tracking-widest text-teal-500/60 block mb-2">{t('Layer Transform', '레이어 크기/위치')}</span>
@@ -3065,6 +3114,82 @@ ${pathsSvg}
                                 <div>
                                   <span className="text-[9px] text-white/40 block mb-1">Height</span>
                                   <input type="number" value={Math.round(bounds.h)} onChange={e => { const val = parseFloat(e.target.value); if (!isNaN(val) && val > 0) applyPathTransform(pathId, bounds.x, bounds.y, bounds.w, val); }} className="w-full bg-black/60 border border-white/10 rounded px-2 py-1 text-xs text-white" />
+                                </div>
+                                <div className="col-span-2">
+                                  <span className="text-[9px] text-white/40 block mb-1">{t('Rotation (deg)', '회전 (도)')}</span>
+                                  <div className="flex items-center gap-2">
+                                    <input 
+                                      type="number" 
+                                      value={Math.round(firstPath.rotation || 0)} 
+                                      onChange={e => { 
+                                        const val = parseFloat(e.target.value); 
+                                        if (!isNaN(val)) {
+                                          const center = { x: bounds.x + bounds.w / 2, y: bounds.y + bounds.h / 2 };
+                                          const deltaDeg = val - (firstPath.rotation || 0);
+                                          const cos = Math.cos((deltaDeg * Math.PI) / 180);
+                                          const sin = Math.sin((deltaDeg * Math.PI) / 180);
+                                          
+                                          setSvgPaths(prev => {
+                                            const np = prev.map(p => {
+                                              if (p.id !== pathId) return p;
+                                              return {
+                                                ...p,
+                                                rotation: val,
+                                                subPaths: p.subPaths.map(pts => pts.map(pt => {
+                                                  const rx = pt.x - center.x;
+                                                  const ry = pt.y - center.y;
+                                                  const nPt: Point = {
+                                                    x: rx * cos - ry * sin + center.x,
+                                                    y: rx * sin + ry * cos + center.y
+                                                  };
+                                                  if (pt.bezier) {
+                                                    nPt.bezier = {
+                                                      cx1: (pt.bezier.cx1 - center.x) * cos - (pt.bezier.cy1 - center.y) * sin + center.x,
+                                                      cy1: (pt.bezier.cx1 - center.x) * sin + (pt.bezier.cy1 - center.y) * cos + center.y,
+                                                      cx2: (pt.bezier.cx2 - center.x) * cos - (pt.bezier.cy2 - center.y) * sin + center.x,
+                                                      cy2: (pt.bezier.cx2 - center.x) * sin + (pt.bezier.cy2 - center.y) * cos + center.y,
+                                                    };
+                                                  }
+                                                  return nPt;
+                                                }))
+                                              };
+                                            });
+                                            latestPathsRef.current = np;
+                                            return np;
+                                          });
+                                        }
+                                      }}
+                                      onBlur={() => commitChange(svgPaths)}
+                                      className="flex-1 bg-black/60 border border-white/10 rounded px-2 py-1 text-xs text-white" 
+                                    />
+                                    <button onClick={() => {
+                                      const center = { x: bounds.x + bounds.w / 2, y: bounds.y + bounds.h / 2 };
+                                      const deltaDeg = - (firstPath.rotation || 0);
+                                      const cos = Math.cos((deltaDeg * Math.PI) / 180);
+                                      const sin = Math.sin((deltaDeg * Math.PI) / 180);
+                                      setSvgPaths(prev => {
+                                        const np = prev.map(p => p.id === pathId ? {
+                                          ...p, rotation: 0,
+                                          subPaths: p.subPaths.map(pts => pts.map(pt => {
+                                            const rx = pt.x - center.x; const ry = pt.y - center.y;
+                                            const nPt: Point = { x: rx * cos - ry * sin + center.x, y: rx * sin + ry * cos + center.y };
+                                            if (pt.bezier) {
+                                              nPt.bezier = {
+                                                cx1: (pt.bezier.cx1 - center.x) * cos - (pt.bezier.cy1 - center.y) * sin + center.x,
+                                                cy1: (pt.bezier.cx1 - center.x) * sin + (pt.bezier.cy1 - center.y) * cos + center.y,
+                                                cx2: (pt.bezier.cx2 - center.x) * cos - (pt.bezier.cy2 - center.y) * sin + center.x,
+                                                cy2: (pt.bezier.cx2 - center.x) * sin + (pt.bezier.cy2 - center.y) * cos + center.y,
+                                              };
+                                            }
+                                            return nPt;
+                                          }))
+                                        } : p);
+                                        latestPathsRef.current = np;
+                                        commitChange(np);
+                                        return np;
+                                      });
+                                    }} className="p-1 rounded bg-white/5 hover:bg-white/10 text-white/40 hover:text-white transition-all"><RefreshCw size={12} /></button>
+                                  </div>
                                 </div>
                               </div>
                             </div>
@@ -3157,14 +3282,6 @@ ${pathsSvg}
                         panStartRef.current = { x: e.clientX, y: e.clientY };
                       }
                     }}
-                    onMouseMove={(e) => {
-                      if (isPanning && panStartRef.current) {
-                        const dx = e.clientX - panStartRef.current.x;
-                        const dy = e.clientY - panStartRef.current.y;
-                        setPan(p => ({ x: p.x + dx, y: p.y + dy }));
-                        panStartRef.current = { x: e.clientX, y: e.clientY };
-                      }
-                    }}
                     onMouseUp={() => setIsPanning(false)}
                     onContextMenu={(e) => e.preventDefault()}
                   >
@@ -3193,7 +3310,8 @@ ${pathsSvg}
 
                       {step === 'edit' && sourceImage && (
                         <svg
-                          viewBox={viewBox}
+                          ref={svgRef}
+                          viewBox={`0 0 ${canvasSize.width} ${canvasSize.height}`}
                           width={canvasSize.width}
                           height={canvasSize.height}
                           className="border border-white/10 rounded-lg shadow-xl bg-white"
@@ -3201,7 +3319,6 @@ ${pathsSvg}
                           onMouseDown={handleSvgMouseDown}
                           onMouseMove={handleSvgMouseMove}
                           onMouseUp={handleSvgMouseUp}
-                          onMouseLeave={handleSvgMouseUp}
                         >
                           <defs>
                             <pattern id="smallGrid" width="1" height="1" patternUnits="userSpaceOnUse">
@@ -3482,7 +3599,7 @@ ${pathsSvg}
                             const dotR = 1.5 / zoom;
                             const inset = Math.max(16 / zoom, maxR * 0.12);
                             // Corner positions in local space (TL, TR, BR, BL)
-                            const localCorners = [
+                            const corners = [
                               { x: data.x + inset, y: data.y + inset },
                               { x: data.x + data.w - inset, y: data.y + inset },
                               { x: data.x + data.w - inset, y: data.y + data.h - inset },
@@ -3491,7 +3608,7 @@ ${pathsSvg}
 
                             return (
                               <g transform={`rotate(${data.rotation}, ${data.center.x}, ${data.center.y})`}>
-                                {localCorners.map((c, ci) => (
+                                {corners.map((c, ci) => (
                                   <g key={`cr-${ci}`} style={{ cursor: 'pointer' }}>
                                     {/* Invisible hit area */}
                                     <circle
