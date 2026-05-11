@@ -170,3 +170,27 @@ export interface AppState {
   floorplanPersistedState?: any;
   showFloorplanModal?: boolean;
 }
+
+export const PRESET_MAPPINGS: { [key: string]: { textureId: string, height: number, posY: number, showBlackTop?: boolean } } = {
+  'floor': { textureId: '40105356-f6d7-4dde-81bb-32022ec0ebc9', height: 0, posY: -0.005 },
+  'ceiling': { textureId: '40105356-f6d7-4dde-81bb-32022ec0ebc9', height: 0, posY: 2.5 },
+  'glass': { textureId: '9c9fb578-4db0-4593-859f-31c77874329e', height: 2, posY: 0, showBlackTop: true },
+  'wall': { textureId: 'f7242ee2-04ee-4cb5-ad35-4bc67816ff04', height: 2, posY: 0, showBlackTop: true },
+  'wood': { textureId: 'f7242ee2-04ee-4cb5-ad35-4bc67816ff04', height: 2, posY: 0 },
+  'board': { textureId: 'e6adf2f6-9cbc-4a98-b985-352a545714a2', height: 2, posY: 0 },
+  'interior': { textureId: 'e6adf2f6-9cbc-4a98-b985-352a545714a2', height: 1, posY: 0.83 },
+  'displayg': { textureId: 'abb90572-74c9-4ea8-a2a3-f3b4eddfbbcc', height: 2, posY: 0.8 },
+  'display': { textureId: 'abb90572-74c9-4ea8-a2a3-f3b4eddfbbcc', height: 1.0, posY: 0.96 },
+  'high': { textureId: 'e6adf2f6-9cbc-4a98-b985-352a545714a2', height: 1.86, posY: 0 },
+  'low': { textureId: 'e6adf2f6-9cbc-4a98-b985-352a545714a2', height: 0.4, posY: 0 },
+  'bookcase': { textureId: 'e6adf2f6-9cbc-4a98-b985-352a545714a2', height: 1.8, posY: 0 },
+  'lockers': { textureId: 'e6adf2f6-9cbc-4a98-b985-352a545714a2', height: 1.8, posY: 0 },
+  'chair_high': { textureId: 'e6adf2f6-9cbc-4a98-b985-352a545714a2', height: 0.7, posY: 0 },
+  'chair_low': { textureId: 'e6adf2f6-9cbc-4a98-b985-352a545714a2', height: 0.4, posY: 0 },
+  'chair': { textureId: 'e6adf2f6-9cbc-4a98-b985-352a545714a2', height: 0.5, posY: 0 },
+  'table_high': { textureId: 'e6adf2f6-9cbc-4a98-b985-352a545714a2', height: 1, posY: 0 },
+  'table_low': { textureId: 'e6adf2f6-9cbc-4a98-b985-352a545714a2', height: 0.6, posY: 0 },
+  'table': { textureId: 'e6adf2f6-9cbc-4a98-b985-352a545714a2', height: 0.7, posY: 0 },
+  'desk': { textureId: 'e6adf2f6-9cbc-4a98-b985-352a545714a2', height: 0.7, posY: 0 },
+  'rack': { textureId: 'e6adf2f6-9cbc-4a98-b985-352a545714a2', height: 1.8, posY: 0 },
+};

@@ -1,3 +1,4 @@
+// HMR trigger
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import paper from 'paper';
@@ -892,25 +893,37 @@ export const FloorplanToSvg: React.FC<FloorplanToSvgProps> = ({ isOpen, onClose,
     }
   }, [sourceImage, adj, svgPaths, step, fromDirectSvg, canvasSize, zoom, onStateChange]);
 
-  const handleResizeCanvas = useCallback((newWidth: number) => {
-    if (newWidth <= 0 || newWidth === canvasSize.width) return;
-    const scale = newWidth / canvasSize.width;
-    const newHeight = canvasSize.height * scale;
-    setCanvasSize({ width: newWidth, height: newHeight });
+  const getFullBoundingBox = useCallback(() => {
+    if (svgPaths.length === 0) return { x: 0, y: 0, w: 0, h: 0 };
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    svgPaths.forEach(path => {
+      path.subPaths.forEach(pts => pts.forEach(p => {
+        if (p.x < minX) minX = p.x; if (p.x > maxX) maxX = p.x;
+        if (p.y < minY) minY = p.y; if (p.y > maxY) maxY = p.y;
+      }));
+    });
+    if (minX === Infinity) return { x: 0, y: 0, w: 0, h: 0 };
+    return { x: minX, y: minY, w: maxX - minX, h: maxY - minY };
+  }, [svgPaths]);
+
+  const handleScaleAllContents = useCallback((newWidth: number) => {
+    const bounds = getFullBoundingBox();
+    if (bounds.w <= 0) return;
+    const ratio = newWidth / bounds.w;
 
     const scalePath = (p: SvgPath): SvgPath => ({
       ...p,
       subPaths: p.subPaths.map(pts => pts.map(pt => ({
-        x: pt.x * scale,
-        y: pt.y * scale,
+        x: pt.x * ratio,
+        y: pt.y * ratio,
         bezier: pt.bezier ? {
-          cx1: pt.bezier.cx1 * scale,
-          cy1: pt.bezier.cy1 * scale,
-          cx2: pt.bezier.cx2 * scale,
-          cy2: pt.bezier.cy2 * scale
+          cx1: pt.bezier.cx1 * ratio,
+          cy1: pt.bezier.cy1 * ratio,
+          cx2: pt.bezier.cx2 * ratio,
+          cy2: pt.bezier.cy2 * ratio
         } : undefined
       }))),
-      cornerRadii: p.cornerRadii ? p.cornerRadii.map(r => r * scale) as [number, number, number, number] : undefined,
+      cornerRadii: p.cornerRadii ? p.cornerRadii.map(r => r * ratio) as [number, number, number, number] : undefined,
       groupChildren: p.groupChildren ? p.groupChildren.map(scalePath) : undefined
     });
 
@@ -920,7 +933,12 @@ export const FloorplanToSvg: React.FC<FloorplanToSvgProps> = ({ isOpen, onClose,
       latestPathsRef.current = np;
       return np;
     });
-  }, [canvasSize, commitChange]);
+
+    setCanvasSize(prev => ({
+      width: prev.width * ratio,
+      height: prev.height * ratio
+    }));
+  }, [getFullBoundingBox, commitChange]);
 
   const getSelectionBounds = useCallback(() => {
     if (selectedPathIds.size === 0) return null;
@@ -1241,10 +1259,14 @@ export const FloorplanToSvg: React.FC<FloorplanToSvgProps> = ({ isOpen, onClose,
                 if (subPaths.length === 0 || subPaths.every(sp => sp.length === 0)) return null;
                 const id = el.getAttribute('id') || fallbackId;
                 const fill = el.getAttribute('fill') || '#333333';
+                const lowId = id.toLowerCase();
+                const defaultColor = lowId.includes('floor') ? '#7ADB89' : lowId.includes('glass') ? '#0033ff' : '#333333';
+                const defaultOpacity = lowId.includes('floor') ? 0.3 : lowId.includes('glass') ? 1.0 : 0.85;
+
                 return {
                   id, name: id, subPaths, closed,
-                  color: fill === 'none' ? '#333333' : fill,
-                  opacity: parseFloat(el.getAttribute('fill-opacity') || '1'),
+                  color: fill === 'none' ? defaultColor : fill,
+                  opacity: el.getAttribute('fill-opacity') ? parseFloat(el.getAttribute('fill-opacity')!) : defaultOpacity,
                 };
               }
               if (tag === 'rect') {
@@ -1254,13 +1276,17 @@ export const FloorplanToSvg: React.FC<FloorplanToSvgProps> = ({ isOpen, onClose,
                 const h = parseFloat(el.getAttribute('height') || '0');
                 if (w <= 0 || h <= 0) return null;
                 const id = el.getAttribute('id') || fallbackId;
+                const lowId = id.toLowerCase();
+                const defaultColor = lowId.includes('floor') ? '#7ADB89' : lowId.includes('glass') ? '#0033ff' : '#333333';
+                const defaultOpacity = lowId.includes('floor') ? 0.3 : lowId.includes('glass') ? 1.0 : 0.85;
+
                 const pts = [{ x, y }, { x: x + w, y }, { x: x + w, y: y + h }, { x, y: y + h }].map(pt => applyMatrixToPoint(pt, combinedMatrix));
                 return {
                   id, name: id,
                   subPaths: [pts],
                   closed: true,
-                  color: el.getAttribute('fill') || '#333333',
-                  opacity: parseFloat(el.getAttribute('fill-opacity') || el.getAttribute('opacity') || '1'),
+                  color: el.getAttribute('fill') || defaultColor,
+                  opacity: el.getAttribute('fill-opacity') ? parseFloat(el.getAttribute('fill-opacity')!) : (el.getAttribute('opacity') ? parseFloat(el.getAttribute('opacity')!) : defaultOpacity),
                 };
               }
               if (tag === 'polygon' || tag === 'polyline') {
@@ -1274,12 +1300,16 @@ export const FloorplanToSvg: React.FC<FloorplanToSvgProps> = ({ isOpen, onClose,
                 pts = pts.map(pt => applyMatrixToPoint(pt, combinedMatrix));
                 if (pts.length < 2) return null;
                 const id = el.getAttribute('id') || fallbackId;
+                const lowId = id.toLowerCase();
+                const defaultColor = lowId.includes('floor') ? '#7ADB89' : lowId.includes('glass') ? '#0033ff' : '#333333';
+                const defaultOpacity = lowId.includes('floor') ? 0.3 : lowId.includes('glass') ? 1.0 : 0.85;
+
                 return {
                   id, name: id,
                   subPaths: [pts],
                   closed: tag === 'polygon',
-                  color: el.getAttribute('fill') || '#333333',
-                  opacity: parseFloat(el.getAttribute('fill-opacity') || '1'),
+                  color: el.getAttribute('fill') || defaultColor,
+                  opacity: el.getAttribute('fill-opacity') ? parseFloat(el.getAttribute('fill-opacity')!) : defaultOpacity,
                 };
               }
               return null;
@@ -1419,8 +1449,11 @@ export const FloorplanToSvg: React.FC<FloorplanToSvgProps> = ({ isOpen, onClose,
     const floorPoints = convexHull(allPoints);
     const floorPath: SvgPath = {
       id: 'floor',
+      name: t('Floor', '바닥면'),
       subPaths: [floorPoints],
-      closed: true
+      closed: true,
+      color: '#7ADB89',
+      opacity: 0.3
     };
 
     // Wall first (top layer in UI), Floor second (bottom layer in UI)
@@ -1533,7 +1566,8 @@ ${pathsSvg}
       return;
     }
 
-    const svg = e.currentTarget;
+    const svg = svgRef.current;
+    if (!svg) return;
     const pt = svg.createSVGPoint();
     pt.x = e.clientX; pt.y = e.clientY;
     const ctm = svg.getScreenCTM()?.inverse();
@@ -2290,26 +2324,32 @@ ${pathsSvg}
     };
   }, [isPanning, handleSvgMouseUp]);
 
-  const handleWheel = useCallback((e: React.WheelEvent) => {
-    if (step === 'upload') return;
-    e.preventDefault();
-    const zoomFactor = 1.1;
-    const delta = e.deltaY > 0 ? 1 / zoomFactor : zoomFactor;
-    const newZoom = Math.max(0.1, Math.min(100, zoom * delta));
+  useEffect(() => {
+    const viewport = viewportRef.current;
+    if (!viewport || step === 'upload') return;
 
-    // Zoom to cursor logic
-    const rect = e.currentTarget.getBoundingClientRect();
-    const mouseX = e.clientX - rect.left;
-    const mouseY = e.clientY - rect.top;
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const zoomFactor = 1.1;
+      const delta = e.deltaY > 0 ? 1 / zoomFactor : zoomFactor;
+      const newZoom = Math.max(0.1, Math.min(100, zoom * delta));
 
-    const dx = (mouseX - pan.x) / zoom;
-    const dy = (mouseY - pan.y) / zoom;
+      const rect = viewport.getBoundingClientRect();
+      const mouseX = e.clientX - rect.left;
+      const mouseY = e.clientY - rect.top;
 
-    const newPanX = mouseX - dx * newZoom;
-    const newPanY = mouseY - dy * newZoom;
+      const dx = (mouseX - pan.x) / zoom;
+      const dy = (mouseY - pan.y) / zoom;
 
-    setZoom(newZoom);
-    setPan({ x: newPanX, y: newPanY });
+      const newPanX = mouseX - dx * newZoom;
+      const newPanY = mouseY - dy * newZoom;
+
+      setZoom(newZoom);
+      setPan({ x: newPanX, y: newPanY });
+    };
+
+    viewport.addEventListener('wheel', onWheel, { passive: false });
+    return () => viewport.removeEventListener('wheel', onWheel);
   }, [zoom, pan, step]);
 
   const toggleCurve = useCallback(() => {
@@ -3075,14 +3115,14 @@ ${pathsSvg}
                                   )}
                                 </div>
                                 <div className="flex items-center gap-2 mt-1" onClick={e => e.stopPropagation()}>
-                                  <input type="color" value={path.color || (path.id === 'floor' ? '#dddddd' : '#333333')}
+                                  <input type="color" value={path.color || (path.id.toLowerCase().includes('floor') ? '#7ADB89' : path.id.toLowerCase().includes('glass') ? '#0033ff' : '#333333')}
                                     onChange={(e) => { const np = [...svgPaths]; np[idx] = { ...path, color: e.target.value }; setSvgPaths(np); }}
                                     className="w-5 h-5 rounded cursor-pointer border-0 bg-transparent p-0" />
-                                  <input type="range" min="0" max="1" step="0.05" value={path.opacity ?? (path.id === 'floor' ? 0.05 : 0.85)}
+                                  <input type="range" min="0" max="1" step="0.05" value={path.opacity ?? (path.id.toLowerCase().includes('floor') ? 0.3 : path.id.toLowerCase().includes('glass') ? 1.0 : 0.85)}
                                     onChange={(e) => { const np = [...svgPaths]; np[idx] = { ...path, opacity: parseFloat(e.target.value) }; setSvgPaths(np); }}
                                     onMouseUp={() => commitChange(svgPaths)}
                                     className="flex-1 h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-teal-500" />
-                                  <span className="text-[10px] font-mono text-white/40 w-6 text-right">{(path.opacity ?? (path.id === 'floor' ? 0.05 : 0.85)).toFixed(2)}</span>
+                                  <span className="text-[10px] font-mono text-white/40 w-6 text-right">{(path.opacity ?? (path.id.toLowerCase().includes('floor') ? 0.3 : path.id.toLowerCase().includes('glass') ? 1.0 : 0.85)).toFixed(2)}</span>
                                 </div>
                               </div>
                             ))}
@@ -3199,11 +3239,11 @@ ${pathsSvg}
                         <div className="space-y-3 p-3 bg-white/[0.02] rounded-xl border border-white/5">
                           <span className="text-[10px] font-black uppercase tracking-widest text-white/30">{t('Canvas / Export', '캔버스 / 출력 설정')}</span>
                           <div className="space-y-1.5">
-                            <span className="text-[10px] text-white/30 font-bold uppercase">{t('Canvas Width (px)', '캔버스 전체 가로 너비 (px)')}</span>
-                            <input type="number" min={1} value={Math.round(canvasSize.width)}
+                            <span className="text-[10px] text-white/30 font-bold uppercase">{t('Total Content Width', '도형 기준 전체 너비')}</span>
+                            <input type="number" min={1} value={Math.round(getFullBoundingBox().w)}
                               onChange={(e) => {
                                 const val = parseInt(e.target.value);
-                                if (!isNaN(val) && val > 0) handleResizeCanvas(val);
+                                if (!isNaN(val) && val > 0) handleScaleAllContents(val);
                               }}
                               className="w-full bg-black/60 border border-white/10 rounded-lg px-3 py-2 text-[11px] font-mono font-bold text-white focus:border-teal-500/50 outline-none"
                             />
@@ -3272,14 +3312,36 @@ ${pathsSvg}
                     ref={viewportRef}
                     onMouseEnter={() => setIsMouseInViewport(true)}
                     onMouseLeave={() => setIsMouseInViewport(false)}
-                    className="flex-1 overflow-hidden bg-[#111] flex items-center justify-center p-4 relative"
-                    style={{ cursor: isSpacePressed ? (isPanning ? 'grabbing' : 'grab') : 'default' }}
+                    className="flex-1 overflow-hidden flex items-center justify-center p-0 relative"
+                    style={{ 
+                      cursor: isSpacePressed ? (isPanning ? 'grabbing' : 'grab') : (step === 'edit' ? (editMode ? 'crosshair' : drawTool === 'rect' ? 'crosshair' : 'default') : 'default'),
+                      backgroundColor: '#ffffff'
+                    }}
                     onDoubleClick={() => { if (step === 'edit') setEditMode(!editMode); }}
-                    onWheel={handleWheel}
                     onMouseDown={(e) => {
                       if (isSpacePressed || e.button === 1 || e.button === 2) {
                         setIsPanning(true);
                         panStartRef.current = { x: e.clientX, y: e.clientY };
+                        return;
+                      }
+                      // Left click on background
+                      if (e.button === 0) {
+                        const svg = svgRef.current;
+                        if (svg) {
+                          const pt = svg.createSVGPoint();
+                          pt.x = e.clientX; pt.y = e.clientY;
+                          const ctm = svg.getScreenCTM()?.inverse();
+                          if (ctm) {
+                            const svgPt = pt.matrixTransform(ctm);
+                            if (drawTool === 'rect') {
+                              setRectDraw({ x1: svgPt.x, y1: svgPt.y, x2: svgPt.x, y2: svgPt.y });
+                            } else if (!editMode && drawTool === 'select') {
+                              setSelectedPathId(null);
+                              setSelectedPathIds(new Set());
+                              setSelectedPoints(new Set());
+                            }
+                          }
+                        }
                       }
                     }}
                     onMouseUp={() => setIsPanning(false)}
@@ -3314,15 +3376,18 @@ ${pathsSvg}
                           viewBox={`0 0 ${canvasSize.width} ${canvasSize.height}`}
                           width={canvasSize.width}
                           height={canvasSize.height}
-                          className="border border-white/10 rounded-lg shadow-xl bg-white"
-                          style={{ cursor: editMode ? 'crosshair' : drawTool === 'rect' ? 'crosshair' : 'default' }}
+                          className="bg-transparent"
+                          style={{ 
+                            cursor: editMode ? 'crosshair' : drawTool === 'rect' ? 'crosshair' : 'default',
+                            overflow: 'visible'
+                          }}
                           onMouseDown={handleSvgMouseDown}
                           onMouseMove={handleSvgMouseMove}
                           onMouseUp={handleSvgMouseUp}
                         >
                           <defs>
                             <pattern id="smallGrid" width="1" height="1" patternUnits="userSpaceOnUse">
-                              <path d="M 1 0 L 0 0 0 1" fill="none" stroke="rgba(0,0,0,0.15)" strokeWidth={1 / zoom} />
+                              <path d="M 1 0 L 0 0 0 1" fill="none" stroke="rgba(0,0,0,0.08)" strokeWidth={1 / zoom} />
                             </pattern>
                             <pattern id="grid" width="10" height="10" patternUnits="userSpaceOnUse">
                               {zoom >= 3 && <rect width="10" height="10" fill="url(#smallGrid)" />}
@@ -3330,9 +3395,10 @@ ${pathsSvg}
                             </pattern>
                             <pattern id="largeGrid" width="100" height="100" patternUnits="userSpaceOnUse">
                               <rect width="100" height="100" fill="url(#grid)" />
-                              <path d="M 100 0 L 0 0 0 100" fill="none" stroke="rgba(0,0,0,0.18)" strokeWidth={1.5 / zoom} />
+                              <path d="M 100 0 L 0 0 0 100" fill="none" stroke="rgba(0,0,0,0.15)" strokeWidth={1 / zoom} />
                             </pattern>
                           </defs>
+                          <rect x="-50000" y="-50000" width="100000" height="100000" fill="url(#largeGrid)" pointerEvents="none" />
                           {showBgInEdit && sourceImage && (
                             <image
                               href={sourceImage.src}
@@ -3341,9 +3407,6 @@ ${pathsSvg}
                               opacity={0.3}
                               preserveAspectRatio="none"
                             />
-                          )}
-                          {zoom >= 0.2 && (
-                            <rect width={canvasSize.width} height={canvasSize.height} fill="url(#largeGrid)" pointerEvents="none" />
                           )}
                           {/* Combined paths preview — render in reverse so top-of-list layer draws last (on top) */}
                           {[...svgPaths].reverse().filter(p => p.visible !== false).map(path => {
@@ -3397,10 +3460,10 @@ ${pathsSvg}
                                 {/* Visual Path */}
                                 <path
                                   d={pathData}
-                                  fill={path.color || (path.id === 'floor' ? 'rgba(255,255,255,0.05)' : 'rgba(51,51,51,0.85)')}
-                                  fillOpacity={path.opacity !== undefined ? path.opacity : (path.id === 'floor' ? 0.05 : 0.85)}
+                                  fill={path.color || (path.id.toLowerCase().includes('floor') ? '#7ADB89' : path.id.toLowerCase().includes('glass') ? '#0033ff' : '#333333')}
+                                  fillOpacity={path.opacity !== undefined ? path.opacity : (path.id.toLowerCase().includes('floor') ? 0.3 : path.id.toLowerCase().includes('glass') ? 1.0 : 0.85)}
                                   fillRule="evenodd"
-                                  stroke={isSelected ? ACCENT_400 : (path.id === 'floor' ? 'rgba(255,255,255,0.1)' : 'none')}
+                                  stroke={isSelected ? ACCENT_400 : (path.id.toLowerCase().includes('floor') ? 'rgba(255,255,255,0.1)' : 'none')}
                                   strokeWidth={isSelected ? 2 / zoom : 1 / zoom}
                                   strokeDasharray={isSelected ? `${6 / zoom} ${3 / zoom}` : 'none'}
                                   pointerEvents="none"
