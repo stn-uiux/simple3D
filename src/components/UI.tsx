@@ -993,33 +993,35 @@ export const UI: React.FC<UIProps> = ({
                         </div>
 
                         <div className="pt-3 border-t border-white/5 space-y-3">
-                          <div className="grid grid-cols-4 gap-2">
-                            <button
-                              onClick={() => onUpdateItem(selectedItem.id, { doubleSide: !selectedItem.doubleSide })}
-                              className={`flex flex-col items-center gap-1.5 p-2 rounded-xl border transition-all ${!selectedItem.doubleSide ? 'bg-teal-500/10 border-teal-500/30' : 'bg-white/5 border-white/5 hover:bg-white/10'}`}
-                            >
-                              <span className="text-[10px] font-black uppercase text-white/50">Culling</span>
-                              <span className={`text-[10px] font-black ${!selectedItem.doubleSide ? 'text-teal-500' : 'text-white/30'}`}>{!selectedItem.doubleSide ? 'ACTIVE' : 'OFF'}</span>
-                            </button>
-                            {(() => {
-                              const lowerId = (selectedItem.id || '').toLowerCase();
-                              const lowerGroup = (selectedItem.groupId || '').toLowerCase();
-                              const isWall = (lowerId.includes('wall') || lowerGroup.includes('wall')) &&
-                                !lowerId.includes('floor') && !lowerId.includes('ceiling');
-                              const isBox = selectedItem.type === 'box';
-                              const isGlass = lowerId.includes('glass') || lowerGroup.includes('glass');
-                              if (!isWall && !isBox && !isGlass) return null;
-                              return (
-                                <button
-                                  onClick={() => onUpdateItem(selectedItem.id, { showBlackTop: selectedItem.showBlackTop === true ? false : true })}
-                                  className={`flex flex-col items-center gap-1.5 p-2 rounded-xl border transition-all ${selectedItem.showBlackTop === true ? 'bg-teal-500/10 border-teal-500/30' : 'bg-white/5 border-white/5 hover:bg-white/10'}`}
-                                >
-                                  <span className="text-[10px] font-black uppercase text-white/50">Top Color</span>
-                                  <span className={`text-[10px] font-black ${selectedItem.showBlackTop === true ? 'text-teal-500' : 'text-white/30'}`}>{selectedItem.showBlackTop === true ? 'BLACK' : 'OFF'}</span>
-                                </button>
-                              );
-                            })()}
-                          </div>
+                          {!selectedItem.areaGradient && (
+                            <div className="grid grid-cols-4 gap-2">
+                              <button
+                                onClick={() => onUpdateItem(selectedItem.id, { doubleSide: !selectedItem.doubleSide })}
+                                className={`flex flex-col items-center gap-1.5 p-2 rounded-xl border transition-all ${!selectedItem.doubleSide ? 'bg-teal-500/10 border-teal-500/30' : 'bg-white/5 border-white/5 hover:bg-white/10'}`}
+                              >
+                                <span className="text-[10px] font-black uppercase text-white/50">Culling</span>
+                                <span className={`text-[10px] font-black ${!selectedItem.doubleSide ? 'text-teal-500' : 'text-white/30'}`}>{!selectedItem.doubleSide ? 'ACTIVE' : 'OFF'}</span>
+                              </button>
+                              {(() => {
+                                const lowerId = (selectedItem.id || '').toLowerCase();
+                                const lowerGroup = (selectedItem.groupId || '').toLowerCase();
+                                const isWall = (lowerId.includes('wall') || lowerGroup.includes('wall')) &&
+                                  !lowerId.includes('floor') && !lowerId.includes('ceiling');
+                                const isBox = selectedItem.type === 'box';
+                                const isGlass = lowerId.includes('glass') || lowerGroup.includes('glass');
+                                if (!isWall && !isBox && !isGlass) return null;
+                                return (
+                                  <button
+                                    onClick={() => onUpdateItem(selectedItem.id, { showBlackTop: selectedItem.showBlackTop === true ? false : true })}
+                                    className={`flex flex-col items-center gap-1.5 p-2 rounded-xl border transition-all ${selectedItem.showBlackTop === true ? 'bg-teal-500/10 border-teal-500/30' : 'bg-white/5 border-white/5 hover:bg-white/10'}`}
+                                  >
+                                    <span className="text-[10px] font-black uppercase text-white/50">Top Color</span>
+                                    <span className={`text-[10px] font-black ${selectedItem.showBlackTop === true ? 'text-teal-500' : 'text-white/30'}`}>{selectedItem.showBlackTop === true ? 'BLACK' : 'OFF'}</span>
+                                  </button>
+                                );
+                              })()}
+                            </div>
+                          )}
 
                           {selectedItem.type === 'box' && (
                             <div className="space-y-4 pt-4 border-t border-white/5 animate-in slide-in-from-top-2 duration-300">
@@ -1059,156 +1061,73 @@ export const UI: React.FC<UIProps> = ({
                           )}
 
                           <div className="space-y-4 pt-2">
-                            <div className={`flex items-center justify-between p-3 bg-black/40 rounded-xl border border-white/5 shadow-inner transition-all ${selectedItem.textureId && selectedItem.textureId !== 'none' ? 'opacity-30 pointer-events-none' : ''}`}>
-                              <div className="flex flex-col">
-                                <span className="text-[10px] font-black text-white/50 uppercase tracking-widest leading-none mb-1">{t('Base Color Tint', '베이스 색상 틴트')}</span>
-                                <span className="text-[10px] font-mono text-teal-500 uppercase tracking-widest">{selectedItem.color || 'Default'}</span>
-                              </div>
-                              <div className="relative w-8 h-8 rounded-lg overflow-hidden border border-white/20 hover:border-teal-500 transition-all shadow-lg">
-                                <input
-                                  type="color"
-                                  value={selectedItem.color || '#94a3b8'}
-                                  onChange={(e) => onUpdateItem(selectedItem.id, { color: e.target.value })}
-                                  className="absolute -inset-4 w-16 h-16 cursor-pointer"
-                                />
-                                <div className="absolute inset-0 pointer-events-none bg-gradient-to-tr from-black/20 to-transparent" />
-                              </div>
-                            </div>
-
-                            <div className="space-y-2">
-                              <span className="text-[10px] font-black text-white/50 uppercase tracking-widest px-1">Material Asset</span>
-                              <TextureSelector
-                                textures={allTextures}
-                                selectedId={selectedItem.textureId || 'none'}
-                                onSelect={(tid) => {
-                                  const updates: Partial<FurnitureItem> = { textureId: tid };
-                                  if (tid !== 'none' && selectedItem.textureTiling === undefined) {
-                                    updates.textureTiling = true;
-                                  }
-                                  onUpdateItem(selectedItem.id, updates);
-                                }}
-                                onEditMaterial={(mid) => {
-                                  setActiveTab('materials');
-                                  setJumpToMaterialId(mid);
-                                }}
-                                language={state.language}
-                              />
-                            </div>
-
-                            {selectedItem.textureId && selectedItem.textureId !== 'none' && (
-                              <div className="p-3 bg-black/40 rounded-xl border border-white/5 shadow-inner space-y-4">
-                                <div className="flex items-center justify-between">
-                                  <span className="text-[10px] font-black text-white/50 uppercase tracking-widest">Texture Tiling</span>
-                                  <button
-                                    onClick={() => onUpdateItem(selectedItem.id, { textureTiling: !selectedItem.textureTiling })}
-                                    className={`w-9 h-4.5 rounded-full transition-all relative p-0.5 border ${selectedItem.textureTiling ? 'bg-teal-500/20 border-teal-500/30' : 'bg-black/40 border-white/10'}`}
-                                  >
-                                    <div className={`w-3 h-3 rounded-full transition-all ${selectedItem.textureTiling ? `translate-x-[18px] bg-teal-500 shadow-[0_0_10px_${accentRgba(0.5)}]` : 'translate-x-0 bg-white/20'}`} />
-                                  </button>
+                            {!selectedItem.areaGradient && (
+                              <div className={`flex items-center justify-between p-3 bg-black/40 rounded-xl border border-white/5 shadow-inner transition-all ${selectedItem.textureId && selectedItem.textureId !== 'none' ? 'opacity-30 pointer-events-none' : ''}`}>
+                                <div className="flex flex-col">
+                                  <span className="text-[10px] font-black text-white/50 uppercase tracking-widest leading-none mb-1">{t('Base Color Tint', '베이스 색상 틴트')}</span>
+                                  <span className="text-[10px] font-mono text-teal-500 uppercase tracking-widest">{selectedItem.color || 'Default'}</span>
                                 </div>
-
-                                {selectedItem.textureTiling && (
-                                  <div className="space-y-4 pt-1 animate-in fade-in slide-in-from-top-2 duration-300">
-                                    <div className="space-y-2">
-                                      <div className="flex justify-between text-[10px] font-black text-white/30 uppercase tracking-widest">
-                                        <span>{t('Tiling Density', '개체 타일 밀도')}</span>
-                                      </div>
-                                      <div className="grid grid-cols-2 gap-2">
-                                        {[0, 1].map(idx => (
-                                          <div key={idx} className="flex flex-col gap-1.5">
-                                            <div className="flex justify-between text-[10px] text-white/30">
-                                              <span>{idx === 0 ? 'X SCALE' : 'Y SCALE'}</span>
-                                              <EditableNumber
-                                                value={selectedItem.textureDensity?.[idx] || 1}
-                                                onChange={(val) => {
-                                                  const dens = [...(selectedItem.textureDensity || [1, 1])] as [number, number];
-                                                  dens[idx] = val;
-                                                  onUpdateItem(selectedItem.id, { textureDensity: dens });
-                                                }}
-                                              />
-                                            </div>
-                                            <input
-                                              type="range" min="0.1" max="10" step="0.1"
-                                              value={selectedItem.textureDensity?.[idx] || 1}
-                                              onChange={(e) => {
-                                                const dens = [...(selectedItem.textureDensity || [1, 1])] as [number, number];
-                                                dens[idx] = parseFloat(e.target.value);
-                                                onUpdateItem(selectedItem.id, { textureDensity: dens });
-                                              }}
-                                              className="w-full h-1 bg-white/5 rounded-lg appearance-none cursor-pointer accent-teal-500"
-                                            />
-                                          </div>
-                                        ))}
-                                      </div>
-                                    </div>
-
-                                    <div className="space-y-2">
-                                      <div className="flex justify-between text-[10px] font-black text-white/30 uppercase tracking-widest">
-                                        <span>{t('Tiling Offset', '개체 타일 오프셋')}</span>
-                                        <button
-                                          onClick={() => onUpdateState({ gizmoMode: state.gizmoMode === 'texture' ? 'translate' : 'texture' })}
-                                          className={`px-1.5 py-0.5 rounded text-[10px] font-black uppercase transition-all ${state.gizmoMode === 'texture' ? 'bg-teal-500 text-black' : 'bg-white/5 text-white/50 hover:bg-white/10'}`}
-                                        >
-                                          {state.gizmoMode === 'texture' ? 'Gizmo Active' : 'Use 3D Gizmo'}
-                                        </button>
-                                      </div>
-                                      <div className="grid grid-cols-2 gap-2">
-                                        {[0, 1].map(idx => (
-                                          <div key={idx} className="flex flex-col gap-1.5">
-                                            <div className="flex justify-between text-[10px] text-white/30">
-                                              <span>{idx === 0 ? 'X OFFSET' : 'Y OFFSET'}</span>
-                                              <EditableNumber
-                                                value={selectedItem.textureOffset?.[idx] || 0}
-                                                onChange={(val) => {
-                                                  const off = [...(selectedItem.textureOffset || [0, 0])] as [number, number];
-                                                  off[idx] = val;
-                                                  onUpdateItem(selectedItem.id, { textureOffset: off });
-                                                }}
-                                                precision={2}
-                                              />
-                                            </div>
-                                            <input
-                                              type="range" min="-1" max="1" step="0.01"
-                                              value={selectedItem.textureOffset?.[idx] || 0}
-                                              onChange={(e) => {
-                                                const off = [...(selectedItem.textureOffset || [0, 0])] as [number, number];
-                                                off[idx] = parseFloat(e.target.value);
-                                                onUpdateItem(selectedItem.id, { textureOffset: off });
-                                              }}
-                                              className="w-full h-1 bg-white/5 rounded-lg appearance-none cursor-pointer accent-teal-500"
-                                            />
-                                          </div>
-                                        ))}
-                                      </div>
-                                    </div>
-                                  </div>
-                                )}
+                                <div className="relative w-8 h-8 rounded-lg overflow-hidden border border-white/20 hover:border-teal-500 transition-all shadow-lg">
+                                  <input
+                                    type="color"
+                                    value={selectedItem.color || '#94a3b8'}
+                                    onChange={(e) => onUpdateItem(selectedItem.id, { color: e.target.value })}
+                                    className="absolute -inset-4 w-16 h-16 cursor-pointer"
+                                  />
+                                  <div className="absolute inset-0 pointer-events-none bg-gradient-to-tr from-black/20 to-transparent" />
+                                </div>
                               </div>
                             )}
 
-                            {selectedItem.textureId && selectedItem.textureId !== 'none' && (() => {
-                              const appliedTex = allTextures.find(t => t.id === selectedItem.textureId);
-                              if (!appliedTex?.maps?.displacement) return null;
-                              const dispVal = selectedItem.displacementScale ?? appliedTex?.displacementScale ?? 0.1;
-                              return (
-                                <div className="p-3 bg-black/40 rounded-xl border border-white/5 shadow-inner space-y-2">
-                                  <div className="flex justify-between text-[10px] font-black text-white/30 uppercase tracking-widest">
-                                    <span>Displacement Scale</span>
-                                    <EditableNumber
-                                      value={dispVal}
-                                      onChange={(val) => onUpdateItem(selectedItem.id, { displacementScale: val })}
-                                      precision={3}
-                                    />
-                                  </div>
-                                  <input
-                                    type="range" min="0" max="1" step="0.001"
-                                    value={dispVal}
-                                    onChange={(e) => onUpdateItem(selectedItem.id, { displacementScale: parseFloat(e.target.value) })}
-                                    className="w-full h-1 bg-white/5 rounded-lg appearance-none cursor-pointer accent-teal-500"
+                            {!selectedItem.areaGradient && (
+                              <>
+                                <div className="space-y-2">
+                                  <span className="text-[10px] font-black text-white/50 uppercase tracking-widest px-1">Material Asset</span>
+                                  <TextureSelector
+                                    textures={allTextures}
+                                    selectedId={selectedItem.textureId || 'none'}
+                                    onSelect={(tid) => {
+                                      const updates: Partial<FurnitureItem> = { textureId: tid };
+                                      if (tid !== 'none' && selectedItem.textureTiling === undefined) {
+                                        updates.textureTiling = true;
+                                      }
+                                      onUpdateItem(selectedItem.id, updates);
+                                    }}
+                                    onEditMaterial={(mid) => {
+                                      setActiveTab('materials');
+                                      setJumpToMaterialId(mid);
+                                    }}
+                                    language={state.language}
                                   />
                                 </div>
-                              );
-                            })()}
+
+
+
+                                {selectedItem.textureId && selectedItem.textureId !== 'none' && (() => {
+                                  const appliedTex = allTextures.find(t => t.id === selectedItem.textureId);
+                                  if (!appliedTex?.maps?.displacement) return null;
+                                  const dispVal = selectedItem.displacementScale ?? appliedTex?.displacementScale ?? 0.1;
+                                  return (
+                                    <div className="p-3 bg-black/40 rounded-xl border border-white/5 shadow-inner space-y-2">
+                                      <div className="flex justify-between text-[10px] font-black text-white/30 uppercase tracking-widest">
+                                        <span>Displacement Scale</span>
+                                        <EditableNumber
+                                          value={dispVal}
+                                          onChange={(val) => onUpdateItem(selectedItem.id, { displacementScale: val })}
+                                          precision={3}
+                                        />
+                                      </div>
+                                      <input
+                                        type="range" min="0" max="1" step="0.001"
+                                        value={dispVal}
+                                        onChange={(e) => onUpdateItem(selectedItem.id, { displacementScale: parseFloat(e.target.value) })}
+                                        className="w-full h-1 bg-white/5 rounded-lg appearance-none cursor-pointer accent-teal-500"
+                                      />
+                                    </div>
+                                  );
+                                })()}
+                              </>
+                            )}
                           </div>
 
                           {selectedItem.hasGlass && (
@@ -1276,99 +1195,101 @@ export const UI: React.FC<UIProps> = ({
                             </div>
                           )}
 
-                          <div className="pt-3 space-y-3">
-                            <div className="flex items-center justify-between px-1">
-                              <div className="flex items-center gap-2">
-                                <Scissors className="w-3 h-3 text-teal-500/40" />
-                                <span className="text-[10px] text-white/30 font-black uppercase tracking-widest">{t('Subtraction System', '객체 결합 및 제거')}</span>
-                              </div>
-                              <button
-                                onClick={() => {
-                                  const newSub = { id: uuidv4(), type: 'box' as const, position: [0, 0, 0] as [number, number, number], rotation: [0, 0, 0] as [number, number, number], dimensions: [0.5, 0.5, 0.5] as [number, number, number] };
-                                  onUpdateItem(selectedItem.id, { subtractions: [...(selectedItem.subtractions || []), newSub] }, true);
-                                  setSelectedSubId(newSub.id);
-                                }}
-                                className="px-2 py-0.5 bg-teal-500/10 hover:bg-teal-500 text-teal-500 hover:text-black rounded-lg text-[10px] font-black uppercase tracking-widest border border-teal-500/20 transition-all"
-                              >
-                                {t('Add Hole', '구멍 추가')}
-                              </button>
-                            </div>
-                            <div className="space-y-2">
-                              {(selectedItem.subtractions || []).map(sub => (
-                                <div key={sub.id} className="space-y-2">
-                                  <div
-                                    onClick={() => setSelectedSubId(selectedSubId === sub.id ? null : sub.id)}
-                                    className={`flex items-center justify-between p-3 rounded-xl border transition-all cursor-pointer ${selectedSubId === sub.id ? 'bg-teal-500/10 border-teal-500/50' : 'bg-black/40 border-white/5 hover:border-white/10'}`}
-                                  >
-                                    <div className="flex items-center gap-3">
-                                      <div className={`w-2 h-2 rounded-full ${selectedSubId === sub.id ? 'bg-teal-500 shadow-[0_0_8px_#2dd4bf] animate-pulse' : 'bg-white/10'}`} />
-                                      <div className="flex flex-col">
-                                        <span className="text-[10px] font-black text-white/80 uppercase tracking-widest">{sub.type} Boolean</span>
-                                        <span className="text-[10px] text-white/30 font-mono tracking-tighter uppercase">{sub.id.slice(0, 8)}</span>
-                                      </div>
-                                    </div>
-                                    <button
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        onUpdateItem(selectedItem.id, { subtractions: selectedItem.subtractions?.filter(s => s.id !== sub.id) }, true);
-                                        if (selectedSubId === sub.id) setSelectedSubId(null);
-                                      }}
-                                      className="p-1.5 rounded-lg text-white/30 hover:text-red-500 transition-colors hover:bg-red-500/10"
-                                    >
-                                      <Trash size={12} />
-                                    </button>
-                                  </div>
-                                  {selectedSubId === sub.id && (
-                                    <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} className="ml-3 pl-3 border-l-2 border-teal-500/20 space-y-3">
-                                      <div className="space-y-2">
-                                        <span className="text-[10px] text-white/30 font-black uppercase tracking-widest">Position Matrix</span>
-                                        <div className="grid grid-cols-3 gap-1.5">
-                                          {['X', 'Y', 'Z'].map((l, i) => (
-                                            <input
-                                              key={l} type="number" step="0.1"
-                                              value={Number(sub.position[i].toFixed(2))}
-                                              onChange={(e) => {
-                                                const newSubs = selectedItem.subtractions!.map(s => {
-                                                  if (s.id !== sub.id) return s;
-                                                  const pos = [...s.position] as [number, number, number];
-                                                  pos[i] = parseFloat(e.target.value) || 0;
-                                                  return { ...s, position: pos };
-                                                });
-                                                onUpdateItem(selectedItem.id, { subtractions: newSubs }, true);
-                                              }}
-                                              className="bg-black/60 border border-white/5 rounded-lg px-1 py-1.5 text-center text-[10px] font-mono font-bold text-white outline-none focus:border-teal-500/30 shadow-inner"
-                                            />
-                                          ))}
-                                        </div>
-                                      </div>
-                                      <div className="space-y-2">
-                                        <span className="text-[10px] text-white/30 font-black uppercase tracking-widest">Dimension Matrix</span>
-                                        <div className="grid grid-cols-3 gap-1.5">
-                                          {['W', 'H', 'D'].map((l, i) => (
-                                            <input
-                                              key={l} type="number" step="0.1"
-                                              value={sub.dimensions[i] ?? 1}
-                                              onChange={(e) => {
-                                                const newSubs = selectedItem.subtractions!.map(s => {
-                                                  if (s.id !== sub.id) return s;
-                                                  const dims = [...s.dimensions] as [number, number, number];
-                                                  const val = parseFloat(e.target.value);
-                                                  dims[i] = isNaN(val) ? 0 : val;
-                                                  return { ...s, dimensions: dims };
-                                                });
-                                                onUpdateItem(selectedItem.id, { subtractions: newSubs }, true);
-                                              }}
-                                              className="bg-black/60 border border-white/5 rounded-lg px-1 py-1.5 text-center text-[10px] font-mono font-bold text-white outline-none focus:border-teal-500/30 shadow-inner"
-                                            />
-                                          ))}
-                                        </div>
-                                      </div>
-                                    </motion.div>
-                                  )}
+                          {!selectedItem.areaGradient && (
+                            <div className="pt-3 space-y-3">
+                              <div className="flex items-center justify-between px-1">
+                                <div className="flex items-center gap-2">
+                                  <Scissors className="w-3 h-3 text-teal-500/40" />
+                                  <span className="text-[10px] text-white/30 font-black uppercase tracking-widest">{t('Subtraction System', '객체 결합 및 제거')}</span>
                                 </div>
-                              ))}
+                                <button
+                                  onClick={() => {
+                                    const newSub = { id: uuidv4(), type: 'box' as const, position: [0, 0, 0] as [number, number, number], rotation: [0, 0, 0] as [number, number, number], dimensions: [0.5, 0.5, 0.5] as [number, number, number] };
+                                    onUpdateItem(selectedItem.id, { subtractions: [...(selectedItem.subtractions || []), newSub] }, true);
+                                    setSelectedSubId(newSub.id);
+                                  }}
+                                  className="px-2 py-0.5 bg-teal-500/10 hover:bg-teal-500 text-teal-500 hover:text-black rounded-lg text-[10px] font-black uppercase tracking-widest border border-teal-500/20 transition-all"
+                                >
+                                  {t('Add Hole', '구멍 추가')}
+                                </button>
+                              </div>
+                              <div className="space-y-2">
+                                {(selectedItem.subtractions || []).map(sub => (
+                                  <div key={sub.id} className="space-y-2">
+                                    <div
+                                      onClick={() => setSelectedSubId(selectedSubId === sub.id ? null : sub.id)}
+                                      className={`flex items-center justify-between p-3 rounded-xl border transition-all cursor-pointer ${selectedSubId === sub.id ? 'bg-teal-500/10 border-teal-500/50' : 'bg-black/40 border-white/5 hover:border-white/10'}`}
+                                    >
+                                      <div className="flex items-center gap-3">
+                                        <div className={`w-2 h-2 rounded-full ${selectedSubId === sub.id ? 'bg-teal-500 shadow-[0_0_8px_#2dd4bf] animate-pulse' : 'bg-white/10'}`} />
+                                        <div className="flex flex-col">
+                                          <span className="text-[10px] font-black text-white/80 uppercase tracking-widest">{sub.type} Boolean</span>
+                                          <span className="text-[10px] text-white/30 font-mono tracking-tighter uppercase">{sub.id.slice(0, 8)}</span>
+                                        </div>
+                                      </div>
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          onUpdateItem(selectedItem.id, { subtractions: selectedItem.subtractions?.filter(s => s.id !== sub.id) }, true);
+                                          if (selectedSubId === sub.id) setSelectedSubId(null);
+                                        }}
+                                        className="p-1.5 rounded-lg text-white/30 hover:text-red-500 transition-colors hover:bg-red-500/10"
+                                      >
+                                        <Trash size={12} />
+                                      </button>
+                                    </div>
+                                    {selectedSubId === sub.id && (
+                                      <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} className="ml-3 pl-3 border-l-2 border-teal-500/20 space-y-3">
+                                        <div className="space-y-2">
+                                          <span className="text-[10px] text-white/30 font-black uppercase tracking-widest">Position Matrix</span>
+                                          <div className="grid grid-cols-3 gap-1.5">
+                                            {['X', 'Y', 'Z'].map((l, i) => (
+                                              <input
+                                                key={l} type="number" step="0.1"
+                                                value={Number(sub.position[i].toFixed(2))}
+                                                onChange={(e) => {
+                                                  const newSubs = selectedItem.subtractions!.map(s => {
+                                                    if (s.id !== sub.id) return s;
+                                                    const pos = [...s.position] as [number, number, number];
+                                                    pos[i] = parseFloat(e.target.value) || 0;
+                                                    return { ...s, position: pos };
+                                                  });
+                                                  onUpdateItem(selectedItem.id, { subtractions: newSubs }, true);
+                                                }}
+                                                className="bg-black/60 border border-white/5 rounded-lg px-1 py-1.5 text-center text-[10px] font-mono font-bold text-white outline-none focus:border-teal-500/30 shadow-inner"
+                                              />
+                                            ))}
+                                          </div>
+                                        </div>
+                                        <div className="space-y-2">
+                                          <span className="text-[10px] text-white/30 font-black uppercase tracking-widest">Dimension Matrix</span>
+                                          <div className="grid grid-cols-3 gap-1.5">
+                                            {['W', 'H', 'D'].map((l, i) => (
+                                              <input
+                                                key={l} type="number" step="0.1"
+                                                value={sub.dimensions[i] ?? 1}
+                                                onChange={(e) => {
+                                                  const newSubs = selectedItem.subtractions!.map(s => {
+                                                    if (s.id !== sub.id) return s;
+                                                    const dims = [...s.dimensions] as [number, number, number];
+                                                    const val = parseFloat(e.target.value);
+                                                    dims[i] = isNaN(val) ? 0 : val;
+                                                    return { ...s, dimensions: dims };
+                                                  });
+                                                  onUpdateItem(selectedItem.id, { subtractions: newSubs }, true);
+                                                }}
+                                                className="bg-black/60 border border-white/5 rounded-lg px-1 py-1.5 text-center text-[10px] font-mono font-bold text-white outline-none focus:border-teal-500/30 shadow-inner"
+                                              />
+                                            ))}
+                                          </div>
+                                        </div>
+                                      </motion.div>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
                             </div>
-                          </div>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -1710,95 +1631,7 @@ export const UI: React.FC<UIProps> = ({
                     </button>
                   </div>
 
-                  <div
-                    onDragEnter={(e) => { e.preventDefault(); setIsDraggingMaterials(true); }}
-                    onDragOver={(e) => { e.preventDefault(); setIsDraggingMaterials(true); }}
-                    onDragLeave={(e) => { e.preventDefault(); setIsDraggingMaterials(false); }}
-                    onDrop={async (e) => {
-                      e.preventDefault();
-                      setIsDraggingMaterials(false);
 
-                      const rawFiles = Array.from(e.dataTransfer.files);
-                      const supportedExtensions = ['png', 'jpg', 'jpeg', 'webp', 'bmp', 'gif'];
-                      const validFiles: File[] = [];
-                      const invalidFiles: string[] = [];
-
-                      rawFiles.forEach(f => {
-                        const ext = f.name.split('.').pop()?.toLowerCase() || '';
-                        if (supportedExtensions.includes(ext)) {
-                          validFiles.push(f);
-                        } else {
-                          invalidFiles.push(f.name);
-                        }
-                      });
-
-                      if (invalidFiles.length > 0) {
-                        alert(`지원하지 않는 파일이 포함되어 있습니다: ${invalidFiles.join(', ')}\n(PNG, JPG, WEBP 형식의 이미지만 지원합니다.)`);
-                      }
-
-                      if (validFiles.length === 0) return;
-
-                      const groups: Record<string, any> = {};
-                      for (const file of validFiles) {
-                        const dataUrl = await new Promise<string>((resolve) => {
-                          const reader = new FileReader();
-                          reader.onload = (ev) => resolve(ev.target?.result as string);
-                          reader.readAsDataURL(file);
-                        });
-
-                        const mapType = identifyTextureType(file.name);
-                        let baseName = file.name.replace(/\.[^/.]+$/, "");
-                        const suffixes = ['Color', 'Normal', 'Roughness', 'Metalness', 'Displacement', 'AmbientOcclusion', 'AO', 'Emission', 'Emissive', 'NormalGL', 'NormalDX', 'Disp', 'NRM', 'Height', 'Opacity', 'Alpha', 'Diffuse', 'Albedo', 'BaseColor', '1K-JPG', '1K', '2K', '4K', 'JPG', 'PNG', 'WEBP'];
-
-                        let changed = true;
-                        while (changed) {
-                          changed = false;
-                          for (const suffix of suffixes) {
-                            const regex = new RegExp(`[_-]${suffix}$`, 'i');
-                            if (regex.test(baseName)) {
-                              baseName = baseName.replace(regex, '');
-                              changed = true;
-                            }
-                          }
-                        }
-
-                        if (!groups[baseName]) {
-                          groups[baseName] = {
-                            id: uuidv4(),
-                            name: baseName.replace(/[_-]/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
-                            color: '#ffffff',
-                            isCustom: true,
-                            maps: {},
-                            repeat: [2, 2],
-                            metalness: 0.1,
-                            roughness: 0.7,
-                            displacementScale: 0
-                          };
-                        }
-                        groups[baseName].maps[mapType] = dataUrl;
-                        if (mapType === 'color' || !groups[baseName].url) {
-                          groups[baseName].url = dataUrl;
-                        }
-                      }
-
-                      const newMats = Object.values(groups);
-                      if (newMats.length > 0) {
-                        onUpdateState({ customTextures: [...(state.customTextures || []), ...newMats as any] });
-                      }
-                    }}
-                    className={`mb-4 mx-1.5 py-6 border-2 border-dashed rounded-2xl flex flex-col items-center justify-center gap-2 transition-all group cursor-pointer ${isDraggingMaterials
-                      ? 'border-teal-500 bg-teal-500/10 scale-[1.02]'
-                      : 'border-white/5 bg-white/[0.02] hover:border-teal-500/50'
-                      }`}
-                  >
-                    <div className={`p-3 rounded-full transition-all ${isDraggingMaterials ? 'bg-teal-500/20 text-teal-500' : 'bg-white/5 group-hover:bg-teal-500/20 group-hover:text-teal-500'}`}>
-                      <Library size={20} className={isDraggingMaterials ? 'text-teal-500' : 'text-white/20 group-hover:text-teal-500'} />
-                    </div>
-                    <div className="text-center">
-                      <p className={`text-[10px] font-black uppercase transition-colors ${isDraggingMaterials ? 'text-white' : 'text-white/40 group-hover:text-white'}`}>{t('Drop Material Maps', '재질 맵 이미지를 드롭하세요')}</p>
-                      <p className={`text-[8px] font-bold uppercase tracking-tighter transition-colors ${isDraggingMaterials ? 'text-teal-500/60' : 'text-white/10'}`}>{t('Auto-groups by filename (albedo, normal, etc)', '파일명으로 자동 분류 (albedo, normal 등)')}</p>
-                    </div>
-                  </div>
 
                   <TextureManagerPanel
                     textures={state.customTextures || []}

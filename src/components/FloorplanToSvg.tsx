@@ -401,6 +401,70 @@ function traceContours(grid: Uint8Array, w: number, h: number, simplifyEps: numb
   return paths;
 }
 
+function parseTransform(transformStr: string | null): number[] {
+  if (!transformStr) return [1, 0, 0, 1, 0, 0];
+  const matrices: number[][] = [];
+  const regex = /([a-z]+)\(([^)]+)\)/gi;
+  let match;
+  while ((match = regex.exec(transformStr)) !== null) {
+    const type = match[1].toLowerCase();
+    const args = match[2].split(/[\s,]+/).map(Number);
+    if (type === 'matrix' && args.length === 6) {
+      matrices.push(args);
+    } else if (type === 'translate') {
+      matrices.push([1, 0, 0, 1, args[0], args[1] || 0]);
+    } else if (type === 'scale') {
+      matrices.push([args[0], 0, 0, args[1] ?? args[0], 0, 0]);
+    } else if (type === 'rotate') {
+      const a = (args[0] * Math.PI) / 180;
+      const cos = Math.cos(a), sin = Math.sin(a);
+      if (args.length === 3) {
+        const cx = args[1], cy = args[2];
+        matrices.push([cos, sin, -sin, cos, -cx * cos + cy * sin + cx, -cx * sin - cy * cos + cy]);
+      } else {
+        matrices.push([cos, sin, -sin, cos, 0, 0]);
+      }
+    }
+  }
+  if (matrices.length === 0) return [1, 0, 0, 1, 0, 0];
+  return matrices.reduce((acc, m) => {
+    const [a1, b1, c1, d1, e1, f1] = acc;
+    const [a2, b2, c2, d2, e2, f2] = m;
+    return [
+      a1 * a2 + c1 * b2, b1 * a2 + d1 * b2,
+      a1 * c2 + c1 * d2, b1 * c2 + d1 * d2,
+      a1 * e2 + c1 * f2 + e1, b1 * e2 + d1 * f2 + f1
+    ];
+  }, [1, 0, 0, 1, 0, 0]);
+}
+
+function multiplyMatrices(m1: number[], m2: number[]): number[] {
+  const [a1, b1, c1, d1, e1, f1] = m1;
+  const [a2, b2, c2, d2, e2, f2] = m2;
+  return [
+    a1 * a2 + c1 * b2, b1 * a2 + d1 * b2,
+    a1 * c2 + c1 * d2, b1 * c2 + d1 * d2,
+    a1 * e2 + c1 * f2 + e1, b1 * e2 + d1 * f2 + f1
+  ];
+}
+
+function applyMatrixToPoint(pt: Point, m: number[]): Point {
+  const [a, b, c, d, e, f] = m;
+  const newPt: Point = {
+    x: a * pt.x + c * pt.y + e,
+    y: b * pt.x + d * pt.y + f
+  };
+  if (pt.bezier) {
+    newPt.bezier = {
+      cx1: a * pt.bezier.cx1 + c * pt.bezier.cy1 + e,
+      cy1: b * pt.bezier.cx1 + d * pt.bezier.cy1 + f,
+      cx2: a * pt.bezier.cx2 + c * pt.bezier.cy2 + e,
+      cy2: b * pt.bezier.cx2 + d * pt.bezier.cy2 + f,
+    };
+  }
+  return newPt;
+}
+
 // ──────────────────────────────────────────────
 // Geometry utils
 // ──────────────────────────────────────────────
@@ -1143,12 +1207,17 @@ export const FloorplanToSvg: React.FC<FloorplanToSvgProps> = ({ isOpen, onClose,
             setCanvasSize({ width: svgW, height: svgH });
 
             // Helper: parse a single SVG shape element into an SvgPath
-            const parseShapeEl = (el: Element, fallbackId: string): SvgPath | null => {
+            const parseShapeEl = (el: Element, fallbackId: string, parentMatrix: number[] = [1, 0, 0, 1, 0, 0]): SvgPath | null => {
               const tag = el.tagName.toLowerCase();
+              const transform = el.getAttribute('transform');
+              const localMatrix = parseTransform(transform);
+              const combinedMatrix = multiplyMatrices(parentMatrix, localMatrix);
+
               if (tag === 'path') {
                 const d = el.getAttribute('d');
                 if (!d) return null;
-                const { subPaths, closed } = parseSvgPathD(d);
+                let { subPaths, closed } = parseSvgPathD(d);
+                subPaths = subPaths.map(sp => sp.map(pt => applyMatrixToPoint(pt, combinedMatrix)));
                 if (subPaths.length === 0 || subPaths.every(sp => sp.length === 0)) return null;
                 const id = el.getAttribute('id') || fallbackId;
                 const fill = el.getAttribute('fill') || '#333333';
@@ -1165,9 +1234,10 @@ export const FloorplanToSvg: React.FC<FloorplanToSvgProps> = ({ isOpen, onClose,
                 const h = parseFloat(el.getAttribute('height') || '0');
                 if (w <= 0 || h <= 0) return null;
                 const id = el.getAttribute('id') || fallbackId;
+                const pts = [{ x, y }, { x: x + w, y }, { x: x + w, y: y + h }, { x, y: y + h }].map(pt => applyMatrixToPoint(pt, combinedMatrix));
                 return {
                   id, name: id,
-                  subPaths: [[{ x, y }, { x: x + w, y }, { x: x + w, y: y + h }, { x, y: y + h }]],
+                  subPaths: [pts],
                   closed: true,
                   color: el.getAttribute('fill') || '#333333',
                   opacity: parseFloat(el.getAttribute('fill-opacity') || el.getAttribute('opacity') || '1'),
@@ -1177,10 +1247,11 @@ export const FloorplanToSvg: React.FC<FloorplanToSvgProps> = ({ isOpen, onClose,
                 const pointsAttr = el.getAttribute('points');
                 if (!pointsAttr) return null;
                 const nums = pointsAttr.trim().split(/[\s,]+/).map(Number);
-                const pts: Point[] = [];
+                let pts: Point[] = [];
                 for (let j = 0; j < nums.length - 1; j += 2) {
                   pts.push({ x: nums[j], y: nums[j + 1] });
                 }
+                pts = pts.map(pt => applyMatrixToPoint(pt, combinedMatrix));
                 if (pts.length < 2) return null;
                 const id = el.getAttribute('id') || fallbackId;
                 return {
@@ -1197,10 +1268,19 @@ export const FloorplanToSvg: React.FC<FloorplanToSvgProps> = ({ isOpen, onClose,
             // Parse SVG elements — recognize <g> tags as groups
             const parsed: SvgPath[] = [];
             let elCounter = 0;
-            const topChildren = svgEl.children;
+            let topChildren = svgEl.children;
+            let rootMatrix = [1, 0, 0, 1, 0, 0];
+            // If the top-most element is a single <g> tag, treat its children as the top-level layers
+            if (topChildren.length === 1 && topChildren[0].tagName.toLowerCase() === 'g') {
+              rootMatrix = parseTransform(topChildren[0].getAttribute('transform'));
+              topChildren = topChildren[0].children;
+            }
+
             for (let ci = 0; ci < topChildren.length; ci++) {
               const child = topChildren[ci];
               const tag = child.tagName.toLowerCase();
+              const childLocalMatrix = parseTransform(child.getAttribute('transform'));
+              const combinedGroupMatrix = multiplyMatrices(rootMatrix, childLocalMatrix);
 
               if (tag === 'g') {
                 // Parse <g> as a grouped layer
@@ -1208,7 +1288,7 @@ export const FloorplanToSvg: React.FC<FloorplanToSvgProps> = ({ isOpen, onClose,
                 const groupChildren: SvgPath[] = [];
                 const gKids = child.children;
                 for (let gi = 0; gi < gKids.length; gi++) {
-                  const shape = parseShapeEl(gKids[gi], `${groupId}-child-${gi}`);
+                  const shape = parseShapeEl(gKids[gi], `${groupId}-child-${gi}`, combinedGroupMatrix);
                   if (shape) groupChildren.push(shape);
                 }
                 if (groupChildren.length > 0) {
@@ -1226,7 +1306,7 @@ export const FloorplanToSvg: React.FC<FloorplanToSvgProps> = ({ isOpen, onClose,
                 }
               } else {
                 // Standalone shape element
-                const shape = parseShapeEl(child, `el-${elCounter++}`);
+                const shape = parseShapeEl(child, `el-${elCounter++}`, rootMatrix);
                 if (shape) parsed.push(shape);
               }
             }
