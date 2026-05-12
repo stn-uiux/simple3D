@@ -80,10 +80,10 @@ const BackgroundController = ({ state }: { state: AppState }) => {
     canvas.width = 1024;
     canvas.height = 1024;
     const ctx = canvas.getContext('2d');
-    
+
     if (ctx && state.backgroundStops && state.backgroundStops.length > 0) {
       let gradient;
-      
+
       if (state.backgroundType === 'linear') {
         // Calculate gradient line based on angle
         const angleRad = ((state.backgroundAngle || 0) - 90) * (Math.PI / 180);
@@ -91,12 +91,12 @@ const BackgroundController = ({ state }: { state: AppState }) => {
         const centerX = 512;
         const centerY = 512;
         const length = 512 * Math.sqrt(2); // Distance to corners
-        
+
         const x1 = centerX + Math.cos(angleRad + Math.PI) * length;
         const y1 = centerY + Math.sin(angleRad + Math.PI) * length;
         const x2 = centerX + Math.cos(angleRad) * length;
         const y2 = centerY + Math.sin(angleRad) * length;
-        
+
         gradient = ctx.createLinearGradient(x1, y1, x2, y2);
       } else {
         // Radial Gradient
@@ -115,18 +115,18 @@ const BackgroundController = ({ state }: { state: AppState }) => {
 
       ctx.fillStyle = gradient;
       ctx.fillRect(0, 0, 1024, 1024);
-      
+
       const tex = new THREE.CanvasTexture(canvas);
       tex.colorSpace = THREE.SRGBColorSpace;
       scene.background = tex;
       return;
     }
   }, [
-    state.showBackgroundColor, 
-    state.backgroundColor, 
-    state.backgroundType, 
-    state.backgroundStops, 
-    state.backgroundAngle, 
+    state.showBackgroundColor,
+    state.backgroundColor,
+    state.backgroundType,
+    state.backgroundStops,
+    state.backgroundAngle,
     scene
   ]);
 
@@ -141,7 +141,7 @@ const BackgroundController = ({ state }: { state: AppState }) => {
 
 const ImageBackground = ({ url }: { url: string }) => {
   const { scene } = useThree();
-  
+
   useEffect(() => {
     if (!url) return;
     const loader = new THREE.TextureLoader();
@@ -162,34 +162,30 @@ const ImageBackground = ({ url }: { url: string }) => {
 
 // selectionMeshesRef imported from ../selectionRegistry
 
-const CameraRealtimeInfo = () => {
+
+
+const CameraReporter = ({ onUpdate, enabled }: { onUpdate: (updates: Partial<AppState>) => void, enabled: boolean }) => {
   const { camera, controls } = useThree();
+  const lastUpdate = useRef(0);
+
   useFrame(() => {
-    if (controls) {
-      const distance = (controls as any).getDistance();
-      const polar = (controls as any).getPolarAngle();
-      const azimuth = (controls as any).getAzimuthalAngle();
-      
-      const elDist = document.getElementById('debug-distance');
-      if (elDist) elDist.innerText = distance.toFixed(2);
-      
-      const elPolar = document.getElementById('debug-polar');
-      if (elPolar) elPolar.innerText = (polar * THREE.MathUtils.RAD2DEG).toFixed(1) + '°';
-      
-      const elAzimuth = document.getElementById('debug-azimuth');
-      if (elAzimuth) elAzimuth.innerText = (azimuth * THREE.MathUtils.RAD2DEG).toFixed(1) + '°';
-    }
-    
-    const elPos = document.getElementById('debug-position');
-    if (elPos) elPos.innerText = `X: ${camera.position.x.toFixed(1)}  Y: ${camera.position.y.toFixed(1)}  Z: ${camera.position.z.toFixed(1)}`;
-    
-    const elFov = document.getElementById('debug-fov');
-    if (elFov && (camera as any).fov) elFov.innerText = (camera as any).fov.toFixed(1) + '°';
+    if (!enabled || !controls) return;
+    const now = performance.now();
+    if (now - lastUpdate.current < 200) return; // Throttle to 5fps for performance
+    lastUpdate.current = now;
+
+    const pos = camera.position.toArray() as [number, number, number];
+    const target = (controls as any).target.toArray() as [number, number, number];
+
+    onUpdate({
+      liveCameraSettings: { position: pos, target: target }
+    });
   });
+
   return null;
 };
 
-function FitHandler({ trigger, objects, targetId, onFinish }: { trigger: number, objects: FurnitureItem[], targetId?: string | null, onFinish?: () => void }) {
+function FitHandler({ trigger, objects, targetId, onFinish, state }: { trigger: number, objects: FurnitureItem[], targetId?: string | null, onFinish?: () => void, state: AppState }) {
   const { camera, controls, scene } = useThree();
   const lastTrigger = useRef<number>(0);
   const animRef = useRef<number>(0);
@@ -211,7 +207,7 @@ function FitHandler({ trigger, objects, targetId, onFinish }: { trigger: number,
             // Check if the object has children with geometry
             let hasMesh = false;
             obj.traverse(child => { if ((child as any).isMesh) hasMesh = true; });
-            
+
             if (hasMesh) {
               box.expandByObject(obj);
               foundCount++;
@@ -222,7 +218,7 @@ function FitHandler({ trigger, objects, targetId, onFinish }: { trigger: number,
 
       const expectedCount = targetIds.length;
       if (foundCount === 0 || (expectedCount > 0 && foundCount < expectedCount)) return null;
-      
+
       // Ensure box is not empty and has actual dimensions
       const size = new THREE.Vector3();
       box.getSize(size);
@@ -232,7 +228,7 @@ function FitHandler({ trigger, objects, targetId, onFinish }: { trigger: number,
     };
 
     let box = tryFit();
-    
+
     // If not found, try again once more after a frame (React-three-fiber sync)
     if (!box) {
       const checkInterval = setInterval(() => {
@@ -249,58 +245,94 @@ function FitHandler({ trigger, objects, targetId, onFinish }: { trigger: number,
     performFit(box);
 
     function performFit(box: THREE.Box3) {
-      
+
       const center = new THREE.Vector3();
       box.getCenter(center);
-      const aspect = (camera as THREE.PerspectiveCamera).aspect;
 
-      const size = new THREE.Vector3();
-      box.getSize(size);
-      const radius = size.length() * 0.5 || 1;
-
-      const vFov = (camera as THREE.PerspectiveCamera).fov * THREE.MathUtils.DEG2RAD;
-      const hFov = 2 * Math.atan(Math.tan(vFov / 2) * aspect);
-
-      const distHeight = radius / Math.tan(vFov / 2);
-      const distWidth = radius / Math.tan(hFov / 2);
-
-      // Dynamic framing: Small objects (t=0) get more margin and less vertical offset
-      // Large objects (t=1) get tighter margin and more vertical offset
-      const t = THREE.MathUtils.clamp((radius - 1) / 15, 0, 1);
-      
-      const maxMult = 1.1;  // Small objects: 10% less zoom than before
-      const minMult = 0.68; // Large objects: Keep previous tight zoom
-      const dynamicMultiplier = THREE.MathUtils.lerp(maxMult, minMult, t);
-
-      let cameraDistance = Math.max(distHeight, distWidth) * dynamicMultiplier;
-      cameraDistance = THREE.MathUtils.clamp(cameraDistance, 10, 800);
-
-      const targetPos = new THREE.Vector3(
-        center.x - cameraDistance * 0.53,
-        center.y + cameraDistance * 0.66,
-        center.z + cameraDistance * 0.53
-      );
-
+      const targetPos = new THREE.Vector3();
+      const endTarget = new THREE.Vector3();
       const startPos = camera.position.clone();
       let startTarget = new THREE.Vector3();
-      let endTarget = center.clone();
-      
-      // Dynamic vertical offset: Small objects (0.15), Large objects (0.25)
-      const dynamicVOffsetMult = THREE.MathUtils.lerp(0.15, 0.25, t);
-      const vOffset = (Math.tan(vFov / 2) * cameraDistance * 2) * dynamicVOffsetMult;
-      endTarget.y -= vOffset;
 
-      const viewWidth = (Math.tan(hFov / 2) * cameraDistance * 2);
-      const viewDir = new THREE.Vector3().subVectors(endTarget, targetPos).normalize();
-      const right = new THREE.Vector3().crossVectors(viewDir, new THREE.Vector3(0, 1, 0)).normalize();
-      
-      // Shift 4% left (negative right vector)
-      const horizontalShift = right.multiplyScalar(-viewWidth * 0.04);
-      targetPos.add(horizontalShift);
-      endTarget.add(horizontalShift);
+      if (state.fitMode === 'custom' && !targetId && state.customFitSettings) {
+        // Use custom settings for "Global Fit"
+        const { position, target } = state.customFitSettings;
+        targetPos.set(...position);
+        endTarget.set(...target);
+      } else {
+        // Auto Calculation Logic
+        const aspect = (camera as THREE.PerspectiveCamera).aspect;
+
+        const size = new THREE.Vector3();
+        box.getSize(size);
+        const radius = size.length() * 0.5 || 1;
+
+        const vFov = (camera as THREE.PerspectiveCamera).fov * THREE.MathUtils.DEG2RAD;
+        const hFov = 2 * Math.atan(Math.tan(vFov / 2) * aspect);
+
+        const distHeight = radius / Math.tan(vFov / 2);
+        const distWidth = radius / Math.tan(hFov / 2);
+
+        // Dynamic framing: Small objects (t=0) get more margin and less vertical offset
+        // Large objects (t=1) get tighter margin and more vertical offset
+        const t = THREE.MathUtils.clamp((radius - 1) / 15, 0, 1);
+
+        const maxMult = 1.25;
+        const minMult = 0.83;
+        const dynamicMultiplier = THREE.MathUtils.lerp(maxMult, minMult, t);
+
+        let cameraDistance = Math.max(distHeight, distWidth) * dynamicMultiplier;
+
+        // Zoom adjustments based on aspect ratio (XZ plane)
+        const aspectXZ = size.x / Math.max(0.1, size.z);
+        let zoomFactor = 1.0;
+
+        if (aspectXZ > 1.2) zoomFactor = THREE.MathUtils.lerp(0.85, 0.85, THREE.MathUtils.clamp((aspectXZ - 1.0) / 2.0, 0, 1));
+
+        cameraDistance *= zoomFactor;
+        cameraDistance = THREE.MathUtils.clamp(cameraDistance, 10, 800);
+
+        targetPos.set(
+          center.x - cameraDistance * 0.53,
+          center.y + cameraDistance * 0.66,
+          center.z + cameraDistance * 0.53
+        );
+
+        endTarget.copy(center);
+
+        // Dynamic vertical offset: Small objects (0.15), Large objects (0.25)
+        const dynamicVOffsetMult = THREE.MathUtils.lerp(0.15, 0.25, t);
+        const vOffset = (Math.tan(vFov / 2) * cameraDistance * 2) * dynamicVOffsetMult;
+        endTarget.y -= vOffset;
+
+        const viewWidth = (Math.tan(hFov / 2) * cameraDistance * 2);
+        const viewDir = new THREE.Vector3().subVectors(endTarget, targetPos).normalize();
+        const right = new THREE.Vector3().crossVectors(viewDir, new THREE.Vector3(0, 1, 0)).normalize();
+
+        // Dynamic Offsets based on Aspect Ratio (XZ plane)
+        let hShiftMult = 0; // Perfectly centered for square (1.0)
+        let vShiftMult = 0.07; // 7% Upwards for square (1.0)
+
+        if (aspectXZ > 1.0) {
+          hShiftMult = (aspectXZ - 1.0) * -0.04;
+          vShiftMult = 0.07 + (aspectXZ - 1.0) * 0.05;
+        }
+
+        hShiftMult = THREE.MathUtils.clamp(hShiftMult, -0.1, 0.25);
+        vShiftMult = THREE.MathUtils.clamp(vShiftMult, -0.1, 0.1);
+
+        const horizontalShift = right.clone().multiplyScalar(viewWidth * hShiftMult);
+        targetPos.add(horizontalShift);
+        endTarget.add(horizontalShift);
+
+        const viewHeight = (Math.tan(vFov / 2) * cameraDistance * 2);
+        const verticalShift = new THREE.Vector3(0, viewHeight * vShiftMult, 0);
+        targetPos.add(verticalShift);
+        endTarget.add(verticalShift);
+      }
 
       if (controls) {
-        startTarget = (controls as any).target.clone();
+        startTarget.copy((controls as any).target);
       }
 
       const duration = 800; // Smoother, slightly slower transition
@@ -1075,6 +1107,8 @@ export const Scene = forwardRef<any, SceneProps>(({
   const isBoxSelecting = useRef(false);
   const rightClickStartRef = useRef<{ x: number, y: number } | null>(null);
   const lastPercent = useRef<number>(100);
+  const lastDist = useRef<number>(0);
+  const [pinnedAreaId, setPinnedAreaId] = useState<string | null>(null);
 
   // ARC-FIX: Force resize during CSS transitions
   const ResponsiveEnforcer = () => {
@@ -1100,15 +1134,53 @@ export const Scene = forwardRef<any, SceneProps>(({
 
   const registerMesh = useCallback((id: string, mesh: THREE.Mesh | null) => {
     setMeshes(prev => {
-      if (mesh) return { ...prev, [id]: mesh };
-      const next = { ...prev };
-      delete next[id];
-      return next;
+      // Avoid infinite loops by checking if state actually needs to change
+      if (prev[id] === mesh) return prev;
+
+      if (mesh) {
+        return { ...prev, [id]: mesh };
+      } else {
+        if (prev[id] === undefined) return prev; // Already gone
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      }
     });
   }, []);
 
   const otherMeshes = useMemo(() => Object.values(meshes), [meshes]);
   const selectedItems = useMemo(() => state.items.filter(i => state.selectedIds.includes(i.id)), [state.items, state.selectedIds]);
+
+  const areaStatusMap = useMemo(() => {
+    const areas = state.items.filter(it => it.areaGradient);
+    if (areas.length === 0) return {};
+
+    // Sort by ID for deterministic base
+    const sorted = [...areas].sort((a, b) => a.id.localeCompare(b.id));
+
+    // Deterministic shuffle based on area count
+    const seed = sorted.length;
+    const shuffled = [...sorted];
+    for (let i = 0; i < shuffled.length; i++) {
+      const j = (i * 13 + seed) % shuffled.length;
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+
+    const map: Record<string, string> = {};
+    const statuses = ['Critical', 'Major', 'Minor', 'Warning'];
+
+    // Pick random areas from the shuffled list to assign statuses
+    const availableAreas = [...shuffled];
+    statuses.forEach((status) => {
+      if (availableAreas.length > 0) {
+        const randomIndex = Math.floor(Math.random() * availableAreas.length);
+        const chosenArea = availableAreas.splice(randomIndex, 1)[0];
+        map[chosenArea.id] = status;
+      }
+    });
+
+    return map;
+  }, [state.items]);
 
   const handlePointerDown = (e: React.PointerEvent) => {
     if (e.button === 0 && ctrlPressed) {
@@ -1154,6 +1226,8 @@ export const Scene = forwardRef<any, SceneProps>(({
         const target = (controlsRef.current as any).target;
         if (target) {
           const dist = state.camera.position.distanceTo(target);
+          lastDist.current = dist;
+
           const safeDist = Math.max(0.1, dist);
           const p = Math.round((26 / safeDist) * 100);
           if (p !== lastPercent.current) {
@@ -1195,58 +1269,6 @@ export const Scene = forwardRef<any, SceneProps>(({
 
   const handleContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();
-    if (!viewRef.current || !containerRef.current) return;
-
-    // ARC-FIX: Ignore context menu if it was a drag (pan)
-    if (rightClickStartRef.current) {
-      const dx = e.clientX - rightClickStartRef.current.x;
-      const dy = e.clientY - rightClickStartRef.current.y;
-      rightClickStartRef.current = null;
-      if (Math.sqrt(dx * dx + dy * dy) > 10) return;
-    }
-
-    const { camera, gl } = viewRef.current;
-    const rect = containerRef.current.getBoundingClientRect();
-
-    // Normalize mouse position for Raycaster
-    const mouse = new THREE.Vector2(
-      ((e.clientX - rect.left) / rect.width) * 2 - 1,
-      -((e.clientY - rect.top) / rect.height) * 2 + 1
-    );
-
-    const raycaster = new THREE.Raycaster();
-    raycaster.setFromCamera(mouse, camera);
-
-    // Manual raycast to find objects even if filtered in Canvas raycaster prop
-    const children = gl.domElement.parentElement?.querySelectorAll('*') || [];
-    // Actually we should raycast against the scene
-    const scene = (ref as any).current?.scene;
-    if (!scene) return;
-
-    const intersects = raycaster.intersectObjects(scene.children, true);
-
-    // Find the first furniture/item object
-    for (const intersect of intersects) {
-      let cur: any = intersect.object;
-      while (cur && !cur.userData?.id) {
-        cur = cur.parent;
-      }
-
-      if (cur && cur.userData?.id) {
-        const item = state.items.find(i => i.id === cur.userData.id);
-        if (item) {
-          setContextMenu({
-            x: e.clientX,
-            y: e.clientY,
-            itemId: item.id,
-            isLocked: !!item.locked,
-            isModel: item.type === 'model'
-          });
-          return;
-        }
-      }
-    }
-    setContextMenu(null);
   };
 
   const handlePointerUp = () => {
@@ -1345,7 +1367,7 @@ export const Scene = forwardRef<any, SceneProps>(({
   return (
     <div
       ref={containerRef}
-      className="w-full h-full bg-[#0f0f0f] relative overflow-hidden"
+      className="w-full h-full bg-[#0f0f0f] relative overflow-hidden z-0"
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
@@ -1377,10 +1399,12 @@ export const Scene = forwardRef<any, SceneProps>(({
         onPointerMissed={(e) => {
           if (e.button === 0 && !e.ctrlKey && !e.shiftKey && !e.metaKey) {
             onSelect(null);
+            setPinnedAreaId(null);
           }
         }}
       >
         <ResponsiveEnforcer />
+        <CameraReporter onUpdate={onUpdateState} enabled={state.fitMode === 'custom'} />
         <BackgroundController state={state} />
         {state.lights.map(light => (
           <LightWithHelper
@@ -1435,11 +1459,15 @@ export const Scene = forwardRef<any, SceneProps>(({
           lights={state.lights}
         />
 
-        <FitHandler 
-          trigger={fitSignal} 
-          objects={selectedItems} 
-          targetId={fitTargetId} 
-          onFinish={onFitFinish}
+        <FitHandler
+          trigger={fitSignal}
+          objects={selectedItems}
+          targetId={fitTargetId}
+          onFinish={() => {
+            if (!fitTargetId) setPinnedAreaId(null);
+            onFitFinish?.();
+          }}
+          state={state}
         />
         <OverlayControlsLogic zoomRef={zoomRef} panRef={panRef} />
         <ZoomTracker />
@@ -1479,6 +1507,10 @@ export const Scene = forwardRef<any, SceneProps>(({
                   showReflection={state.showEnvironment}
                   onFitToSelection={onFitToSelection}
                   areasFadeIn={state.areasFadeIn}
+                  language={state.language}
+                  forcedStatus={areaStatusMap[item.id]}
+                  isPinned={pinnedAreaId === item.id}
+                  onPin={(id) => setPinnedAreaId(id)}
                 />
               </Suspense>
             ))}
@@ -1526,37 +1558,27 @@ export const Scene = forwardRef<any, SceneProps>(({
             radius={0.4}
           />
         </EffectComposer>
-        <CameraRealtimeInfo />
+
       </Canvas>
 
       {/* Camera Options Debug Info */}
-      <div className="absolute bottom-6 right-6 pointer-events-none z-50 bg-[#1a1a1a]/80 backdrop-blur-md border border-white/10 rounded-xl p-4 shadow-2xl flex flex-col animate-in fade-in slide-in-from-bottom-2">
-        <div className="text-[9px] font-black text-white/30 uppercase tracking-[0.2em] mb-2 pb-1 border-b border-white/5">
-          Camera State
-        </div>
-        <div className="space-y-1 text-[9px] font-mono font-light tracking-wide min-w-[140px]">
-          <div className="flex items-center justify-between gap-6">
-            <span className="text-white/40">Distance</span>
-            <span className="text-teal-400/80" id="debug-distance">0.00</span>
+      {/* Legend UI */}
+      <div className="absolute bottom-8 right-8 z-50 bg-[#121212]/60 backdrop-blur-xl border border-white/10 rounded-xl px-5 py-2.5 shadow-[0_15px_35px_rgba(0,0,0,0.5)] flex gap-3 animate-in fade-in slide-in-from-right-4 pointer-events-auto items-center">
+        {[
+          { label: state.language === 'ko' ? '저온' : 'Low', range: '~18°', color: '#0084ff' },
+          { label: state.language === 'ko' ? '적정' : 'Normal', range: '~26°', color: '#3fc026' },
+          { label: state.language === 'ko' ? '더움' : 'heat', range: '~31°', color: '#fde047' },
+          { label: state.language === 'ko' ? '고온' : 'High', range: '~37°', color: '#ea580c' },
+          { label: state.language === 'ko' ? '위험' : 'danger', range: '38°~', color: '#ff0000' },
+        ].map((item, idx) => (
+          <div key={idx} className="flex flex-col gap-1.5 w-[80px]">
+            <div className="h-[3px] rounded-full w-full" style={{ backgroundColor: item.color, boxShadow: `0 0 10px ${item.color}44` }} />
+            <div className="flex items-baseline justify-between gap-3">
+              <span className="text-[11px] font-bold text-white/90 whitespace-nowrap">{item.label}</span>
+              <span className="text-[10px] font-mono font-medium text-white/60 whitespace-nowrap">{item.range}</span>
+            </div>
           </div>
-          <div className="flex items-center justify-between gap-6">
-            <span className="text-white/40">Polar Angle</span>
-            <span className="text-teal-400/80" id="debug-polar">0.0°</span>
-          </div>
-          <div className="flex items-center justify-between gap-6">
-            <span className="text-white/40">Azimuth Angle</span>
-            <span className="text-teal-400/80" id="debug-azimuth">0.0°</span>
-          </div>
-          <div className="my-1.5 border-t border-white/5"></div>
-          <div className="flex flex-col">
-            <span className="text-white/40">Position</span>
-            <span className="text-teal-400/80 self-end mt-1" id="debug-position">X: 0.0  Y: 0.0  Z: 0.0</span>
-          </div>
-          <div className="flex items-center justify-between gap-6">
-            <span className="text-white/40">FOV</span>
-            <span className="text-teal-400/80" id="debug-fov">0.0°</span>
-          </div>
-        </div>
+        ))}
       </div>
 
       {/* Selection Box Visual */}
@@ -1578,79 +1600,7 @@ export const Scene = forwardRef<any, SceneProps>(({
       )}
 
       {/* Context Menu */}
-      {contextMenu && (
-        <div
-          className="fixed z-[9999] bg-[#1a1a1a]/95 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl py-2 overflow-hidden animate-in fade-in zoom-in duration-200 pointer-events-auto"
-          style={{
-            top: contextMenu.y + 5,
-            left: contextMenu.x,
-            width: contextMenu.isReplaceMode ? '200px' : 'min-content',
-            minWidth: '140px'
-          }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          {contextMenu.isReplaceMode ? (
-            <div className="flex flex-col">
-              <div className="flex items-center px-2 pb-2 mb-2 border-b border-white/10">
-                <button
-                  onClick={() => setContextMenu(prev => prev ? { ...prev, isReplaceMode: false } : null)}
-                  className="p-1 hover:bg-white/10 rounded text-white/50 hover:text-white transition-colors"
-                >
-                  <ChevronLeft size={14} />
-                </button>
-                <span className="text-[10px] font-black text-white ml-2 uppercase tracking-widest">{state.language === 'ko' ? '에셋 교체' : 'Replace Asset'}</span>
-              </div>
-              <div className="max-h-[200px] overflow-y-auto px-1 custom-scrollbar">
-                {models.map(model => (
-                  <button
-                    key={model.id}
-                    onClick={() => {
-                      onUpdate(contextMenu.itemId, { url: model.url, name: model.name, type: 'model' });
-                      setContextMenu(null);
-                    }}
-                    className="w-full px-3 py-2 text-left text-[10px] font-bold text-white/60 hover:text-white hover:bg-teal-500/20 rounded-lg transition-colors truncate uppercase"
-                  >
-                    {model.name}
-                  </button>
-                ))}
-              </div>
-            </div>
-          ) : (
-            <>
-              <button
-                onClick={() => {
-                  onUpdate(contextMenu.itemId, { locked: !contextMenu.isLocked });
-                  setContextMenu(null);
-                }}
-                className="w-full px-4 py-2.5 text-[10px] font-black text-white hover:bg-teal-500 hover:text-black transition-all flex items-center justify-between gap-4 uppercase tracking-[0.1em] text-left whitespace-nowrap"
-              >
-                <div className="flex items-center gap-2">
-                  {contextMenu.isLocked ? <Unlock size={12} className="text-teal-500" /> : <Lock size={12} className="text-white/40" />}
-                  <span>{contextMenu.isLocked ? (state.language === 'ko' ? '잠금 해제' : 'Unlock') : (state.language === 'ko' ? '레이어 잠금' : 'Lock Layer')}</span>
-                </div>
-              </button>
 
-              {contextMenu.isModel && (
-                <button
-                  onClick={() => setContextMenu(prev => prev ? { ...prev, isReplaceMode: true } : null)}
-                  className="w-full px-4 py-2.5 text-[10px] font-black text-white hover:bg-teal-500 hover:text-black transition-all flex items-center justify-between gap-4 uppercase tracking-[0.1em] text-left whitespace-nowrap"
-                >
-                  <div className="flex items-center gap-2">
-                    <RefreshCw size={12} className="text-white/40" />
-                    <span>{state.language === 'ko' ? '에셋 교체' : 'Replace Asset'}</span>
-                  </div>
-                </button>
-              )}
-
-              <div className="mx-2 mt-1 pt-1 border-t border-white/5">
-                <div className="px-2 py-1 text-[10px] text-white/20 font-black uppercase tracking-widest leading-loose">
-                  Shortcut: <span className="text-white/40">Ctrl+Shift+L</span>
-                </div>
-              </div>
-            </>
-          )}
-        </div>
-      )}
     </div>
   );
 });

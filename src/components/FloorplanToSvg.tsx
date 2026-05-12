@@ -3237,17 +3237,33 @@ ${pathsSvg}
                         })()}
 
                         <div className="space-y-3 p-3 bg-white/[0.02] rounded-xl border border-white/5">
-                          <span className="text-[10px] font-black uppercase tracking-widest text-white/30">{t('Canvas / Export', '캔버스 / 출력 설정')}</span>
-                          <div className="space-y-1.5">
-                            <span className="text-[10px] text-white/30 font-bold uppercase">{t('Total Content Width', '도형 기준 전체 너비')}</span>
-                            <input type="number" min={1} value={Math.round(getFullBoundingBox().w)}
-                              onChange={(e) => {
-                                const val = parseInt(e.target.value);
-                                if (!isNaN(val) && val > 0) handleScaleAllContents(val);
-                              }}
-                              className="w-full bg-black/60 border border-white/10 rounded-lg px-3 py-2 text-[11px] font-mono font-bold text-white focus:border-teal-500/50 outline-none"
-                            />
-                          </div>
+                          <span className="text-[10px] font-black uppercase tracking-widest text-white/30">{t('Drawing Info / Export', '도면 정보 / 출력 설정')}</span>
+                          {(() => {
+                            const box = getFullBoundingBox();
+                            return (
+                              <div className="space-y-1.5">
+                                <span className="text-[10px] text-white/30 font-bold uppercase">{t('Total Width (px)', '도면 전체 가로 너비 (px)')}</span>
+                                <div className="flex gap-2">
+                                  <input
+                                    type="number"
+                                    min={1}
+                                    value={Math.round(box.w)}
+                                    onChange={(e) => {
+                                      const val = parseInt(e.target.value);
+                                      if (!isNaN(val) && val > 0) handleScaleAllContents(val);
+                                    }}
+                                    className="flex-1 min-w-0 bg-black/60 border border-white/10 rounded-lg px-2 py-2 text-[13px] font-bold text-white focus:border-teal-500/50 outline-none h-9"
+                                  />
+                                  <div className="flex flex-col justify-center px-2 bg-white/5 rounded-lg border border-white/5 shrink-0">
+                                    <span className="text-[10px] text-white/40 leading-none font-bold">H: {Math.round(box.h)}px</span>
+                                  </div>
+                                </div>
+                                <p className="text-[8px] text-white/20 uppercase font-black tracking-tighter">
+                                  {t('Adjusting width scales all objects proportionally.', '가로 너비를 조절하면 모든 개체가 비율에 맞춰 확대/축소됩니다.')}
+                                </p>
+                              </div>
+                            );
+                          })()}
 
                           <button onClick={downloadSvg} disabled={svgPaths.length === 0}
                             className="w-full flex items-center justify-center gap-2 py-3 bg-white/5 hover:bg-white/10 text-white/60 hover:text-white border border-white/10 font-black uppercase rounded-xl text-[11px] transition-all disabled:opacity-30"

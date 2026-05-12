@@ -177,6 +177,10 @@ interface FurnitureProps {
   showReflection: boolean;
   onFitToSelection: (id?: string) => void;
   areasFadeIn?: boolean;
+  language?: 'en' | 'ko';
+  forcedStatus?: string;
+  isPinned?: boolean;
+  onPin?: (id: string | null) => void;
 }
 
 const SubtractionGizmo: React.FC<{
@@ -296,7 +300,11 @@ export const Furniture = React.memo(({
   realtimeShadows,
   showReflection,
   onFitToSelection,
-  areasFadeIn
+  areasFadeIn,
+  language = 'en',
+  forcedStatus,
+  isPinned,
+  onPin
 }: FurnitureProps) => {
   const meshRef = useRef<THREE.Mesh>(null!);
   const groupRef = useRef<THREE.Group>(null!);
@@ -1089,43 +1097,80 @@ export const Furniture = React.memo(({
   const bloomRevealProgress = useRef(0);
 
 
+  const envData = useMemo(() => {
+    // Generate semi-random but deterministic mock data based on item ID
+    const hash = item.id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+    
+    let temp = 22; // Default Normal
+    
+    if (forcedStatus) {
+      switch (forcedStatus) {
+        case 'Critical': temp = 38 + (hash % 10); break;
+        case 'Major': temp = 31 + (hash % 6); break;
+        case 'Minor': temp = 26 + (hash % 4); break;
+        case 'Warning': temp = 10 + (hash % 7); break;
+        default: temp = 18 + (hash % 7); break;
+      }
+    } else {
+      // Fallback if no forced status
+      temp = 18 + (hash % 7);
+    }
+
+    // Range 30 to 80%
+    const humidity = 30 + (hash % 50);
+    return { temp, humidity };
+  }, [item.id, forcedStatus]);
+
+  const hasBeenRevealed = useRef(false);
+
   const statusInfo = useMemo(() => {
     if (!item.areaGradient) return null;
 
-    const STATUS_MAP: Record<string, { color: string, label: string, intensity: number }> = {
-      Critical: { color: '#ff0000', label: 'Critical', intensity: 4.5 },
-      Major: { color: '#ea580c', label: 'Major', intensity: 2.5 },
-      Minor: { color: '#fde047', label: 'Minor', intensity: 0.3 },
-      Warning: { color: '#0084ff', label: 'Warning', intensity: 1.2 },
-      Normal: { color: '#3fc026', label: 'Normal', intensity: 0.5 }
+    const STATUS_MAP: Record<string, { color: string, label: string, displayLabel: string, intensity: number }> = {
+      Critical: { color: '#ff0000', label: 'Critical', displayLabel: language === 'ko' ? '위험' : 'danger', intensity: 4.5 },
+      Major: { color: '#ea580c', label: 'Major', displayLabel: language === 'ko' ? '고온' : 'High', intensity: 2.5 },
+      Minor: { color: '#fde047', label: 'Minor', displayLabel: language === 'ko' ? '더움' : 'heat', intensity: 0.3 },
+      Warning: { color: '#0084ff', label: 'Warning', displayLabel: language === 'ko' ? '저온' : 'Low', intensity: 1.2 },
+      Normal: { color: '#3fc026', label: 'Normal', displayLabel: language === 'ko' ? '적정' : 'Normal', intensity: 0.5 }
     };
 
-    // Prioritize manual status selection
+    // 1. Prioritize manual status selection from item data
     if (item.status && STATUS_MAP[item.status]) {
       return STATUS_MAP[item.status];
     }
 
-    // Fallback to name-based logic if no manual status set
-    const name = item.name.toLowerCase();
-    if (name.includes('office2')) return STATUS_MAP.Critical;
-    if (name.includes('testbed1')) return STATUS_MAP.Major;
-    if (name.includes('greathall')) return STATUS_MAP.Minor;
-    if (name.includes('sdc')) return STATUS_MAP.Warning;
-    return STATUS_MAP.Normal;
-  }, [item.name, item.areaGradient, item.status]);
+    // 2. Use forced status if passed as prop
+    if (forcedStatus && STATUS_MAP[forcedStatus]) {
+      return STATUS_MAP[forcedStatus];
+    }
+
+    // 3. Determine status based on temperature (Fallback)
+    const t = envData.temp;
+    if (t >= 38) return STATUS_MAP.Critical; // 38+
+    if (t >= 31) return STATUS_MAP.Major;    // 31-37
+    if (t >= 26) return STATUS_MAP.Minor;    // 26-30
+    if (t < 18) return STATUS_MAP.Warning;   // < 18
+    return STATUS_MAP.Normal;                // 18-25
+  }, [item.areaGradient, item.status, envData.temp, forcedStatus]);
 
 
 
   useFrame((state, delta) => {
     if (item.areaGradient) {
       const selected = isSelected || isPreviewSelected;
-      // Suppress animated effects when user is interacting (select or hover)
-      const interacting = selected || labelHovered;
+      // Suppress animated effects when user is interacting (select or hover/pinned)
+      const interacting = selected || labelHovered || isPinned;
 
-      // Status areas are only revealed if the global areasFadeIn is true
-      // ARC-FIX: 'Normal' status is hidden by default unless interacting (hover/select)
-      // Status areas are revealed if the global areasFadeIn is true
-      const shouldShowByStatus = statusInfo ? areasFadeIn : false;
+      const isNormal = statusInfo?.label === 'Normal';
+      
+      // Keep track of whether a problem area has ever been revealed by areasFadeIn
+      if (!isNormal && areasFadeIn) {
+        hasBeenRevealed.current = true;
+      }
+
+      // Problem areas reveal when areasFadeIn is triggered, then stay visible.
+      // Normal areas still depend on areasFadeIn or interaction.
+      const shouldShowByStatus = isNormal ? areasFadeIn : (areasFadeIn || hasBeenRevealed.current);
       const target = (interacting || shouldShowByStatus) ? 1 : 0;
       revealProgress.current = THREE.MathUtils.lerp(revealProgress.current, target, delta * 8);
 
@@ -1198,34 +1243,95 @@ export const Furniture = React.memo(({
           <Html
             position={[0, (item.extrusion || 3) / 2, 0]}
             center
-            zIndexRange={[10, 0]}
+            wrapperClass={(labelHovered || isPinned) ? '!z-[30]' : '!z-[20]'}
             style={{
               pointerEvents: 'none',
               userSelect: 'none'
             }}
           >
-            <div
-              className="bg-black/60 backdrop-blur-md px-2 py-[2px] rounded-full border text-white text-[10px] font-black uppercase tracking-normal shadow-[0_5px_15px_rgba(0,0,0,0.5)] flex items-center gap-[4px] whitespace-nowrap pointer-events-auto cursor-pointer transition-all hover:scale-105"
-              style={{
-                borderColor: (statusInfo && statusInfo.label !== 'Normal') ? statusInfo.color : 'rgba(255, 255, 255, 0.2)',
-                borderWidth: (statusInfo && statusInfo.label !== 'Normal') ? '2px' : '1px'
-              }}
-              onPointerOver={() => setLabelHovered(true)}
-              onPointerOut={() => setLabelHovered(false)}
-              onPointerDown={(e) => e.stopPropagation()}
-              onClick={(e) => {
-                e.stopPropagation();
-                onFitToSelection(item.id);
-              }}
-            >
+            <div className="relative flex flex-col items-center">
               <div
-                className="w-1.5 h-1.5 rounded-full"
+                className="bg-black/60 backdrop-blur-md px-2 py-[2px] rounded-full border text-white text-[10px] font-black uppercase tracking-normal shadow-[0_5px_15px_rgba(0,0,0,0.5)] flex items-center gap-[4px] whitespace-nowrap pointer-events-auto cursor-pointer transition-all hover:scale-105"
                 style={{
-                  backgroundColor: statusInfo ? statusInfo.color : '#3fc026',
-                  boxShadow: `0 0 8px ${statusInfo ? statusInfo.color : '#3fc026'}`
+                  borderColor: (statusInfo && statusInfo.label !== 'Normal') ? statusInfo.color : 'rgba(255, 255, 255, 0.2)',
+                  borderWidth: (statusInfo && statusInfo.label !== 'Normal') ? '2px' : '1px'
                 }}
-              />
-              {item.name}
+                onPointerOver={() => setLabelHovered(true)}
+                onPointerOut={() => setLabelHovered(false)}
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (onPin) {
+                    // Toggle pin state or switch to new ID
+                    onPin(isPinned ? null : item.id);
+                  }
+                  onFitToSelection(item.id);
+                }}
+              >
+                <div
+                  className="w-1.5 h-1.5 rounded-full"
+                  style={{
+                    backgroundColor: statusInfo ? statusInfo.color : '#3fc026',
+                    boxShadow: `0 0 8px ${statusInfo ? statusInfo.color : '#3fc026'}`
+                  }}
+                />
+                {item.name}
+              </div>
+
+              {(labelHovered || isPinned) && (() => {
+                const tempVal = envData.temp;
+                const humidVal = envData.humidity;
+                
+                const tempLeftColor = (() => {
+                  if (!statusInfo) return '#3fc026';
+                  switch (statusInfo.label) {
+                    case 'Critical': return '#ea580c'; // Major color (Orange)
+                    case 'Major': return '#fde047';    // Minor color (Yellow)
+                    case 'Minor': return '#3fc026';    // Normal color (Green)
+                    case 'Normal': return '#bef264';   // Light green (연두)
+                    case 'Warning': return '#38bdf8';  // Skyblue (하늘색)
+                    default: return '#3fc026';
+                  }
+                })();
+
+                return (
+                  <div className="absolute bottom-full mb-2 bg-black/60 backdrop-blur-md border border-white/10 shadow-[0_8px_32px_rgba(0,0,0,0.8)] rounded-2xl p-3.5 animate-in fade-in zoom-in duration-200 pointer-events-none min-w-[150px] flex flex-col gap-3">
+                    <div className="text-[9px] font-black text-white/70 uppercase tracking-widest border-b border-white/10 pb-1.5 flex justify-between items-center">
+                      <span>{item.name}</span>
+                      <span className="text-teal-400 font-bold flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-teal-400 shadow-[0_0_8px_#2dd4bf] animate-pulse"></span>
+                        Live
+                      </span>
+                    </div>
+                    <div className="flex flex-col gap-3 pt-0.5">
+                      <div className="flex flex-col gap-1.5">
+                        <div className="flex justify-between items-end text-[10px] leading-none">
+                          <span className="text-white/60 font-medium">{language === 'ko' ? '온도' : 'Temp'}</span>
+                          <span className="text-white font-mono font-bold text-[13px] leading-none">{tempVal.toFixed(1)}<span className="text-white/40 text-[9px] ml-0.5">°C</span></span>
+                        </div>
+                        <div className="h-1.5 w-full bg-white/10 rounded-full overflow-hidden">
+                          <div 
+                            className="h-full rounded-full transition-all duration-500" 
+                            style={{ 
+                              width: `${Math.min(100, Math.max(0, ((tempVal - 10) / 30) * 100))}%`,
+                              background: `linear-gradient(to right, ${tempLeftColor}, ${statusInfo?.color || '#3fc026'})`
+                            }} 
+                          />
+                        </div>
+                      </div>
+                      <div className="flex flex-col gap-1.5">
+                        <div className="flex justify-between items-end text-[10px] leading-none">
+                          <span className="text-white/60 font-medium">{language === 'ko' ? '습도' : 'Humidity'}</span>
+                          <span className="text-white font-mono font-bold text-[13px] leading-none">{humidVal}<span className="text-white/40 text-[9px] ml-0.5">%</span></span>
+                        </div>
+                        <div className="h-1.5 w-full bg-white/10 rounded-full overflow-hidden">
+                          <div className="h-full bg-gradient-to-r from-blue-500 to-cyan-400 rounded-full" style={{ width: `${humidVal}%` }} />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           </Html>
         )}
@@ -1443,7 +1549,6 @@ export const Furniture = React.memo(({
               // Invert both axes for opposite response. Reduced sensitivity for precision (0.2 instead of 0.5)
               const deltaX = (pos.x - item.position[0]) * -0.2;
               const deltaZ = (pos.z - item.position[2]) * 0.2;
-              const currentOff = item.textureOffset || [0, 0];
               onUpdate(item.id, {
                 textureOffset: [currentOff[0] + deltaX, currentOff[1] + deltaZ]
               }, false);

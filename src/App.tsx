@@ -135,9 +135,48 @@ export default function App() {
     syncThemeColors();
   }, []);
 
+  useEffect(() => {
+    // Automatically load initial scene if available from /plan/scene.json
+    const loadInitialScene = async () => {
+      try {
+        const response = await fetch('/plan/scene.json');
+        if (response.ok) {
+          setIsLoading(true);
+          const imported = await response.json() as AppState;
+          
+          // Automatic migration from .gltf to .glb for legacy scene files
+          if (imported.items) {
+            imported.items = imported.items.map(item => {
+              if (item.url && item.url.endsWith('.gltf')) {
+                return { ...item, url: item.url.replace('.gltf', '.glb') };
+              }
+              return item;
+            });
+          }
+
+          setState({ ...imported, selectedIds: [], areasFadeIn: false });
+          
+          // Wait for stabilization (meshes created) before triggering fit
+          setTimeout(() => {
+            setFitSignal(s => s + 1);
+            // Reveal areas after fit animation starts
+            setTimeout(() => {
+              setState(prev => ({ ...prev, areasFadeIn: true }));
+              setIsLoading(false);
+            }, 500);
+          }, 800);
+        }
+      } catch (err) {
+        console.warn('Initial scene.json not found in /plan/ or failed to load.');
+      }
+    };
+    loadInitialScene();
+  }, []);
+
   const [shiftPressed, setShiftPressed] = useState(false);
   const [ctrlPressed, setCtrlPressed] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [isEditMode, setIsEditMode] = useState(false);
   const [isDraggingViewport, setIsDraggingViewport] = useState(false);
 
   const saveToHistory = useCallback((newState: AppState) => {
@@ -152,6 +191,10 @@ export default function App() {
     setHistory(h => h.slice(0, -1));
     setState(prev);
   }, [history, state]);
+
+  const handleUpdateState = useCallback((updates: Partial<AppState>) => {
+    setState(prev => ({ ...prev, ...updates }));
+  }, []);
 
   const redo = useCallback(() => {
     if (redoStack.length === 0) return;
@@ -196,6 +239,7 @@ export default function App() {
       rotation: [0, 0, 0],
       scale: [1, 1, 1],
       color: '#ffffff',
+      locked: true,
       subtractions: []
     };
     if (type === 'svg') {
@@ -343,7 +387,7 @@ export default function App() {
   };
 
   const [expandedLights, setExpandedLights] = useState<Set<string>>(new Set());
-  const [showGizmos, setShowGizmos] = useState(true);
+  const [showGizmos, setShowGizmos] = useState(false);
 
   const toggleAllLightsStatus = () => {
     saveToHistory(state);
@@ -547,6 +591,11 @@ export default function App() {
         // Wait for stabilization (meshes created) before triggering fit
         setTimeout(() => {
           setFitSignal(s => s + 1);
+          // Reveal areas after fit animation starts
+          setTimeout(() => {
+            setState(prev => ({ ...prev, areasFadeIn: true }));
+            setIsLoading(false);
+          }, 500);
         }, 800);
       } catch (err) {
         alert('Invalid scene file.');
@@ -843,7 +892,8 @@ export default function App() {
           glassRoughness: isGlass ? 0.0 : undefined,
           emissiveIntensity: isArea ? 0.5 : undefined,
           groupId: isArea ? areaGroupId : undefined,
-          areaGradient: item.areaGradient || false
+          areaGradient: item.areaGradient || false,
+          locked: true
         };
         localNewObjects.push(newItem);
       });
@@ -900,6 +950,11 @@ export default function App() {
       // 1. Wait for stabilization (800ms)
       setTimeout(() => {
         setFitSignal(s => s + 1);
+        // 2. Reveal areas after fit animation starts
+        setTimeout(() => {
+          setState(prev => ({ ...prev, areasFadeIn: true }));
+          setIsLoading(false);
+        }, 500);
       }, 800);
     } else {
       alert('오류: SVG 파일 내부에 id 속성을 가진 요소가 하나도 없습니다.\n도면 레이어에 id를 지정해 주세요. (예: wall, floor, glass, bookcase, table 등)');
@@ -1001,7 +1056,7 @@ export default function App() {
           );
         };
 
-        if (name.endsWith('.glb')) {
+          if (name.endsWith('.glb')) {
           reader.readAsArrayBuffer(file);
         } else {
           reader.readAsText(file);
@@ -1017,20 +1072,6 @@ export default function App() {
       if (document.activeElement?.tagName === 'INPUT' || document.activeElement?.tagName === 'TEXTAREA') return;
 
       const isCmd = e.ctrlKey || e.metaKey;
-
-      if (isCmd && e.shiftKey && e.key.toLowerCase() === 'l') {
-        e.preventDefault();
-        if (state.selectedIds.length > 0) {
-          const updates: { [id: string]: Partial<FurnitureItem> } = {};
-          const anyUnlocked = state.items.some(i => state.selectedIds.includes(i.id) && !i.locked);
-          state.selectedIds.forEach(id => {
-            updates[id] = { locked: anyUnlocked };
-          });
-          handleUpdateItems(updates);
-        }
-        return;
-      }
-
       if (e.key === 'Delete' || e.key === 'Backspace') {
         if (state.showFloorplanModal) return;
         handleDeleteItems();
@@ -1061,15 +1102,9 @@ export default function App() {
   }, [handleDeleteItems, undo, redo, handleCopy, handlePaste, handleGroup, handleUngroup]);
 
   return (
-    <div
-      className="w-full h-screen grid bg-[#0a0a0a] overflow-hidden"
-      style={{
-        gridTemplateColumns: `1fr ${sidebarOpen ? '360px' : '0px'}`,
-        transition: 'grid-template-columns 0.5s ease-in-out'
-      }}
-    >
+    <div className="w-full h-screen relative bg-[#0a0a0a] overflow-hidden">
       <div
-        className={`relative h-full overflow-hidden ${isDraggingViewport ? `ring-4 ring-inset ring-teal-500 shadow-[0_0_50px_${accentRgba(0.3)}]` : ''}`}
+        className={`w-full h-full overflow-hidden ${isDraggingViewport ? `ring-4 ring-inset ring-teal-500 shadow-[0_0_50px_${accentRgba(0.3)}]` : ''}`}
         onDragEnter={(e) => { e.preventDefault(); e.stopPropagation(); setIsDraggingViewport(true); }}
         onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); setIsDraggingViewport(true); }}
         onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); setIsDraggingViewport(false); }}
@@ -1131,7 +1166,7 @@ export default function App() {
         onUpdateLight={handleUpdateLight}
         onUpdateLights={handleUpdateLights}
         onAddLight={handleAddLight}
-        onUpdateState={(updates) => setState(prev => ({ ...prev, ...updates }))}
+        onUpdateState={handleUpdateState}
         onUndo={undo}
         onRedo={redo}
         canUndo={history.length > 0}
@@ -1147,6 +1182,8 @@ export default function App() {
         onSvgUpload={handleSvgUpload}
         onExport={exportScene}
         onImport={handleImport}
+        isEditMode={isEditMode}
+        setIsEditMode={setIsEditMode}
         staticTextures={staticTextures}
         selectedSubId={selectedSubId}
         setSelectedSubId={setSelectedSubId}

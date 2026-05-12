@@ -169,6 +169,15 @@ export interface AppState {
   areasFadeIn?: boolean;
   floorplanPersistedState?: any;
   showFloorplanModal?: boolean;
+  fitMode?: 'auto' | 'custom';
+  customFitSettings?: {
+    position: [number, number, number];
+    target: [number, number, number];
+  };
+  liveCameraSettings?: {
+    position: [number, number, number];
+    target: [number, number, number];
+  };
 }
 
 export const PRESET_MAPPINGS: { [key: string]: { textureId: string, height: number, posY: number, showBlackTop?: boolean } } = {

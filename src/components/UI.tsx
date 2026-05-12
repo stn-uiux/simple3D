@@ -48,7 +48,10 @@ import {
   Loader2,
   ExternalLink,
   RefreshCw,
-  Image
+  Image,
+  Camera,
+  Save,
+  Check
 } from 'lucide-react';
 import {
   FurnitureType,
@@ -101,6 +104,8 @@ interface UIProps {
   panRef: React.RefObject<HTMLDivElement>;
   onSelect: (id: string | null, multi?: boolean, isGroupSelect?: boolean) => void;
   language?: 'en' | 'ko';
+  isEditMode: boolean;
+  setIsEditMode: (mode: boolean) => void;
 }
 
 export const UI: React.FC<UIProps> = ({
@@ -136,7 +141,9 @@ export const UI: React.FC<UIProps> = ({
   zoomRef,
   panRef,
   onSelect,
-  language = 'en'
+  language = 'en',
+  isEditMode,
+  setIsEditMode
 }) => {
   const [activeTab, setActiveTab] = useState<'objects' | 'lights' | 'materials' | 'settings'>('objects');
   const [showCompressor, setShowCompressor] = useState(false);
@@ -390,17 +397,25 @@ export const UI: React.FC<UIProps> = ({
               EN
             </button>
           </div>
+
+          <button
+            onClick={() => setIsEditMode(!isEditMode)}
+            className={`flex items-center gap-2 px-4 py-1.5 rounded-full text-[10px] font-black uppercase transition-all border shadow-2xl ${isEditMode ? `bg-teal-500 text-black border-teal-500 shadow-[0_0_20px_${accentRgba(0.4)}]` : 'bg-black/40 text-white/40 border-white/10 hover:text-white hover:border-white/20'}`}
+          >
+            <Settings className={`w-3.5 h-3.5 ${isEditMode ? 'animate-spin-slow' : ''}`} />
+            {t('Edit', '편집')}
+          </button>
         </div>
 
         {/* Alignment Modal */}
         <AnimatePresence>
-          {state.selectedIds.length > 1 && onAlign && onDistribute && (
+          {isEditMode && state.selectedIds.length > 1 && onAlign && onDistribute && (
             <div
               id="alignment-tools-modal"
               style={{
-                right: sidebarOpen ? '480px' : '160px',
-                top: '24px',
-                transition: 'right 0.5s ease-in-out'
+                left: sidebarOpen ? '400px' : '24px',
+                top: '96px',
+                transition: 'left 0.5s ease-in-out'
               }}
               className="absolute pointer-events-auto overflow-hidden border border-teal-500/20 bg-black/80 backdrop-blur-xl rounded-2xl p-3 space-y-2 shadow-[0_15px_35px_rgba(0,0,0,0.5)] w-[200px]"
             >
@@ -452,62 +467,26 @@ export const UI: React.FC<UIProps> = ({
         </AnimatePresence>
 
         <div
-          style={{
-            right: sidebarOpen ? '376px' : '16px',
-            transition: 'right 0.5s ease-in-out'
-          }}
-          className="absolute top-[130px] flex flex-col items-end gap-3 pointer-events-auto"
+          className="absolute bottom-24 right-8 flex flex-col items-center gap-4 pointer-events-auto z-40"
         >
           <div
-            ref={zoomRef}
-            className="bg-[#2a2a2a] hover:bg-[#3a3a3a] text-white rounded-full p-2.5 cursor-ns-resize shadow-xl flex items-center justify-center w-10 h-10 border border-white/5 transition-colors"
-            title="Drag up/down to Zoom"
-          >
-            <Search size={18} />
-          </div>
-          <div
-            ref={panRef}
-            className="bg-[#2a2a2a] hover:bg-[#3a3a3a] text-white rounded-full p-2.5 cursor-all-scroll shadow-xl flex items-center justify-center w-10 h-10 border border-white/5 transition-colors"
-            title="Drag to Pan"
-          >
-            <Hand size={18} />
-          </div>
-          <div
             onClick={() => onFitToSelection()}
-            className="bg-[#2a2a2a] hover:bg-[#3a3a3a] text-teal-500 rounded-full p-2.5 cursor-pointer shadow-xl flex items-center justify-center w-10 h-10 border border-white/5 transition-colors"
+            className="bg-[#121212]/60 backdrop-blur-xl border border-white/10 hover:bg-teal-500 text-teal-500 hover:text-black rounded-xl p-3.5 cursor-pointer transition-all shadow-[0_15px_35px_rgba(0,0,0,0.5)]"
             title="Fit to Model"
           >
-            <Maximize size={18} />
-          </div>
-
-          <div className="mt-1 glass-panel px-2.5 py-1.5 rounded-xl border border-white/5 flex flex-col items-center bg-black/60 shadow-inner">
-            <span className="text-[10px] font-bold text-white/50 uppercase tracking-widest leading-none mb-1">Zoom</span>
-            <span className="text-[10px] font-mono font-black text-teal-500">{state.zoomPercent}%</span>
+            <Maximize size={20} />
           </div>
         </div>
 
-        {/* Bottom-Left: Create SVG Floorplan Button */}
-        <div className="absolute bottom-6 left-6 pointer-events-auto z-20">
-          <button
-            onClick={() => onUpdateState({ showFloorplanModal: true })}
-            className="flex items-center gap-2.5 px-5 py-3 bg-[#1a1a1a]/90 backdrop-blur-xl hover:bg-teal-500 text-white/70 hover:text-black rounded-2xl border border-white/10 hover:border-teal-500 transition-all shadow-[0_10px_40px_rgba(0,0,0,0.5)] group"
-          >
-            <svg className="w-4 h-4 text-teal-500 group-hover:text-black transition-colors" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="3" y="3" width="18" height="18" rx="2" />
-              <path d="M3 9h18M9 3v18" />
-            </svg>
-            <span className="text-[10px] font-black uppercase tracking-widest">{t('Create SVG Floorplan', 'SVG 평면도 생성')}</span>
-          </button>
-        </div>
 
         <AnimatePresence>
-          {state.items.length === 0 && (
+          {isEditMode && state.items.length === 0 && (
             <motion.div
-              initial={{ opacity: 0, y: 20, x: 'calc(-50% - 180px)' }}
+              initial={{ opacity: 0, y: 20, x: '-50%' }}
               animate={{
                 opacity: 1,
                 y: 20,
-                x: sidebarOpen ? 'calc(-50% - 180px)' : '-50%'
+                x: '-50%'
               }}
               transition={{ type: 'spring', stiffness: 50, damping: 20 }}
               exit={{ opacity: 0, y: 20 }}
@@ -524,15 +503,22 @@ export const UI: React.FC<UIProps> = ({
         </AnimatePresence>
       </div>
 
-      <aside
-        style={{
-          width: sidebarOpen ? '360px' : '0px',
-          opacity: sidebarOpen ? 1 : 0,
-          transition: 'width 0.5s ease-in-out, opacity 0.5s ease-in-out',
-          background: `radial-gradient(circle at bottom right, rgba(var(--accent-r), var(--accent-g), var(--accent-b), 0.3) 0%, #1a1a1a 80%)`
-        }}
-        className="h-full border-l border-white/10 bg-[#1a1a1a] flex flex-col relative z-30 overflow-hidden shrink-0 pointer-events-auto"
-      >
+      <AnimatePresence>
+        {isEditMode && (
+          <motion.aside
+            initial={{ x: -400, opacity: 0 }}
+            animate={{ 
+              x: sidebarOpen ? 0 : -400, 
+              opacity: sidebarOpen ? 1 : 0,
+              pointerEvents: sidebarOpen ? 'auto' : 'none'
+            }}
+            exit={{ x: -400, opacity: 0 }}
+            transition={{ type: 'spring', stiffness: 200, damping: 25 }}
+            style={{
+              background: `radial-gradient(circle at bottom left, rgba(var(--accent-r), var(--accent-g), var(--accent-b), 0.15) 0%, #0f0f0f 100%)`
+            }}
+            className="absolute top-24 bottom-6 left-6 w-[360px] border border-white/10 bg-[#0f0f0f]/90 backdrop-blur-2xl flex flex-col z-50 overflow-hidden rounded-xl shadow-[0_30px_100px_rgba(0,0,0,0.8)]"
+          >
         <div className="flex border-b border-white/10 shrink-0">
           <button
             onClick={() => setActiveTab('objects')}
@@ -541,20 +527,7 @@ export const UI: React.FC<UIProps> = ({
             {activeTab === 'objects' && <motion.div layoutId="tab-underline" className="absolute bottom-0 left-0 right-0 h-0.5 bg-teal-500" />}
             {t('Objects', '오브젝트')}
           </button>
-          <button
-            onClick={() => setActiveTab('lights')}
-            className={`flex-1 py-3 text-[12px] font-black uppercase transition-all relative ${activeTab === 'lights' ? 'text-teal-500 bg-white/5' : 'text-white/30 hover:text-white/60'}`}
-          >
-            {activeTab === 'lights' && <motion.div layoutId="tab-underline" className="absolute bottom-0 left-0 right-0 h-0.5 bg-teal-500" />}
-            {t('Lights', '조명')}
-          </button>
-          <button
-            onClick={() => setActiveTab('materials')}
-            className={`flex-1 py-3 text-[12px] font-black uppercase transition-all relative ${activeTab === 'materials' ? 'text-teal-500 bg-white/5' : 'text-white/30 hover:text-white/60'}`}
-          >
-            {activeTab === 'materials' && <motion.div layoutId="tab-underline" className="absolute bottom-0 left-0 right-0 h-0.5 bg-teal-500" />}
-            {t('Materials', '재질')}
-          </button>
+
           <button
             onClick={() => setActiveTab('settings')}
             className={`flex-1 py-3 text-[12px] font-black uppercase transition-all relative ${activeTab === 'settings' ? 'text-teal-500 bg-white/5' : 'text-white/30 hover:text-white/60'}`}
@@ -568,6 +541,19 @@ export const UI: React.FC<UIProps> = ({
           <div className="p-5 flex flex-col gap-6 w-[360px]">
             {activeTab === 'objects' && (
               <div className="space-y-4 animate-in fade-in slide-in-from-right-2 duration-300">
+                <section className="space-y-1.5">
+                  <button
+                    onClick={() => onUpdateState({ showFloorplanModal: true })}
+                    className="w-full flex items-center justify-center gap-2.5 px-6 py-3.5 bg-teal-500 text-black rounded-2xl border border-teal-400 shadow-[0_10px_40px_rgba(20,184,166,0.3)] transition-all hover:scale-[1.02] active:scale-[0.98] group font-black uppercase tracking-widest text-[11px] mb-2"
+                  >
+                    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="3" y="3" width="18" height="18" rx="2" />
+                      <path d="M3 9h18M9 3v18" />
+                    </svg>
+                    {t('Create SVG Floorplan', 'SVG 평면도 생성')}
+                  </button>
+                </section>
+
                 <section className="space-y-1.5">
                   <div className="flex items-center gap-2.5 mb-1 px-1.5 h-7">
                     <Box className="w-3.5 h-3.5 text-teal-500" />
@@ -911,25 +897,7 @@ export const UI: React.FC<UIProps> = ({
                         />
                       </div>
 
-                      {selectedItem.areaGradient && (
-                        <div className="space-y-1.5 pt-1 animate-in fade-in slide-in-from-top-1 duration-300">
-                          <div className="flex items-center gap-2 mb-1">
-                            <Zap className="w-3 h-3 text-teal-500" />
-                            <span className="text-[10px] text-white/30 font-black uppercase tracking-widest">{t('Obstacle Status', '장애 등급 설정')}</span>
-                          </div>
-                          <select
-                            value={selectedItem.status || 'Normal'}
-                            onChange={(e) => onUpdateItem(selectedItem.id, { status: e.target.value as any })}
-                            className="w-full bg-black/60 border border-white/10 rounded-xl px-3 py-2 text-[10px] font-bold text-white focus:border-teal-500/50 outline-none transition-all shadow-inner appearance-none cursor-pointer"
-                          >
-                            <option value="Critical" className="bg-[#1a1a1a] text-red-500 font-bold">CRITICAL (빨강)</option>
-                            <option value="Major" className="bg-[#1a1a1a] text-orange-500 font-bold">MAJOR (주황)</option>
-                            <option value="Minor" className="bg-[#1a1a1a] text-yellow-500 font-bold">MINOR (노랑)</option>
-                            <option value="Warning" className="bg-[#1a1a1a] text-blue-500 font-bold">WARNING (파랑)</option>
-                            <option value="Normal" className="bg-[#1a1a1a] text-green-500 font-bold">NORMAL (정상 연두)</option>
-                          </select>
-                        </div>
-                      )}
+
 
                       <div className="space-y-4 pt-1">
                         {[
@@ -1911,55 +1879,7 @@ export const UI: React.FC<UIProps> = ({
                 </section>
 
                 {/* 4. Post-processing Section */}
-                <section className="pt-6 border-t border-white/5 space-y-4">
-                  <div className="flex items-center gap-2.5 mb-1 px-1.5 h-7">
-                    <Maximize className="w-3.5 h-3.5 text-teal-500" />
-                    <h2 className="text-xs font-black uppercase tracking-widest text-white/50">{t('Post Processing', '후처리 설정')}</h2>
-                  </div>
 
-                  <div className="space-y-4 px-1.5">
-
-
-                    <div className="space-y-2">
-                      <div className="flex justify-between text-[10px] font-black text-white/50 uppercase tracking-widest leading-none">
-                        <span>{t('Bloom Intensity', '블룸 강도')}</span>
-                        <span className="text-teal-500">{(state.bloomIntensity || 0).toFixed(2)}</span>
-                      </div>
-                      <input
-                        type="range" min="0" max="5" step="0.01"
-                        value={state.bloomIntensity || 0}
-                        onChange={(e) => onUpdateState({ bloomIntensity: parseFloat(e.target.value) })}
-                        className="w-full h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-teal-500"
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <div className="flex justify-between text-[10px] font-black text-white/50 uppercase tracking-widest leading-none">
-                        <span>{t('Bloom Threshold', '블룸 임계값')}</span>
-                        <span className="text-teal-500">{(state.bloomThreshold || 0).toFixed(2)}</span>
-                      </div>
-                      <input
-                        type="range" min="0" max="2" step="0.01"
-                        value={state.bloomThreshold || 0}
-                        onChange={(e) => onUpdateState({ bloomThreshold: parseFloat(e.target.value) })}
-                        className="w-full h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-teal-500"
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <div className="flex justify-between text-[10px] font-black text-white/50 uppercase tracking-widest leading-none">
-                        <span>{t('Bloom Smoothing', '블룸 부드러움')}</span>
-                        <span className="text-teal-500">{(state.bloomSmoothing || 0).toFixed(2)}</span>
-                      </div>
-                      <input
-                        type="range" min="0" max="1" step="0.01"
-                        value={state.bloomSmoothing || 0}
-                        onChange={(e) => onUpdateState({ bloomSmoothing: parseFloat(e.target.value) })}
-                        className="w-full h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-teal-500"
-                      />
-                    </div>
-                  </div>
-                </section>
 
                 {/* 4. Scene Management Section */}
                 <section className="pt-6 border-t border-white/5 space-y-3">
@@ -1970,7 +1890,7 @@ export const UI: React.FC<UIProps> = ({
                   <div className="space-y-2">
 
 
-                    <div className="pt-3 border-t border-white/5 mt-2">
+                    <div className="pt-3 mt-2">
                       <div className="text-[10px] font-black text-white/30 uppercase tracking-[0.1em] px-1.5 mb-2 flex items-center gap-2">
                         <Upload size={10} /> {t('Scene Configuration', '씬 구성 설정')}
                       </div>
@@ -1990,7 +1910,85 @@ export const UI: React.FC<UIProps> = ({
                   </div>
                 </section>
 
-                {/* 5. System Footer */}
+                {/* 5. Global Camera Fit Section */}
+                <section className="pt-6 border-t border-white/5 pb-2">
+                  <div className="flex items-center justify-between mb-4 px-1.5 h-7">
+                    <div className="flex items-center gap-2.5">
+                      <Camera className="w-3.5 h-3.5 text-teal-500" />
+                      <h2 className="text-xs font-black uppercase text-white/50">{t('Global Camera Fit', '전체 화면 맞춤 설정')}</h2>
+                    </div>
+                    <div className="flex items-center gap-2">
+                       <span className="text-[10px] font-black uppercase text-white/30 tracking-widest">{state.fitMode === 'custom' ? 'Custom' : 'Auto'}</span>
+                       <button
+                         onClick={() => onUpdateState({ fitMode: state.fitMode === 'custom' ? 'auto' : 'custom' })}
+                         className={`w-9 h-4.5 rounded-full transition-all relative p-0.5 border ${state.fitMode === 'custom' ? 'bg-teal-500/20 border-teal-500/30' : 'bg-black/40 border-white/10'}`}
+                       >
+                         <div className={`w-3 h-3 rounded-full transition-all ${state.fitMode === 'custom' ? 'translate-x-[18px] bg-teal-500 shadow-[0_0_10px_rgba(45,212,191,0.5)]' : 'translate-x-0 bg-white/20'}`} />
+                       </button>
+                    </div>
+                  </div>
+
+                  {state.fitMode === 'custom' && (
+                    <div className="space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
+                      <div className="bg-black/40 rounded-2xl border border-white/5 p-4 space-y-3 shadow-inner">
+                        <div className="flex flex-col gap-1">
+                           <span className="text-[10px] font-black text-white/30 uppercase tracking-widest">Current Viewport Camera</span>
+                           {state.liveCameraSettings ? (
+                             <div className="grid grid-cols-2 gap-2 mt-1">
+                               <div className="flex flex-col gap-0.5">
+                                 <span className="text-[9px] text-white/20 uppercase">Position</span>
+                                 <span className="text-[10px] font-mono text-teal-500/70">{state.liveCameraSettings.position.map(n => n.toFixed(2)).join(', ')}</span>
+                               </div>
+                               <div className="flex flex-col gap-0.5">
+                                 <span className="text-[9px] text-white/20 uppercase">Target</span>
+                                 <span className="text-[10px] font-mono text-teal-500/70">{state.liveCameraSettings.target.map(n => n.toFixed(2)).join(', ')}</span>
+                               </div>
+                             </div>
+                           ) : (
+                             <span className="text-[10px] text-white/20 italic">Adjust camera in viewport to see values</span>
+                           )}
+                        </div>
+                        
+                        <button
+                          onClick={() => {
+                            if (state.liveCameraSettings) {
+                              onUpdateState({
+                                customFitSettings: {
+                                  position: [...state.liveCameraSettings.position],
+                                  target: [...state.liveCameraSettings.target]
+                                }
+                              });
+                            }
+                          }}
+                          className="w-full py-3 bg-teal-500 text-black rounded-xl font-black text-[11px] uppercase tracking-widest hover:scale-[1.02] active:scale-[0.98] transition-all shadow-lg flex items-center justify-center gap-2"
+                        >
+                          <Save size={14} />
+                          {t('Set Current View as Global Fit', '현재 구도를 전체 맞춤값으로 지정')}
+                        </button>
+                        
+                        {state.customFitSettings && (
+                          <div className="flex items-center justify-between pt-2 border-t border-white/5 mt-1">
+                            <span className="text-[9px] text-teal-500/50 font-black uppercase tracking-widest flex items-center gap-1">
+                              <Check size={10} /> Saved Preset Active
+                            </span>
+                            <button 
+                               onClick={() => onUpdateState({ customFitSettings: undefined })}
+                               className="text-[9px] text-red-500/50 hover:text-red-500 font-black uppercase"
+                            >
+                               Reset
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                  
+                  <p className="px-1.5 text-[10px] text-white/20 leading-relaxed italic mt-2">
+                    {t('Tip: When Custom is enabled, clicking "Fit to Model" will use your saved viewpoint instead of auto-calculating.', '팁: Custom 활성 시 "전체 화면 맞춤" 버튼을 누르면 저장한 구도로 이동합니다.')}
+                  </p>
+                </section>
+
+                {/* 6. System Footer */}
                 <div className="mt-6 pt-6 border-t border-white/5 opacity-50">
                   <div className="bg-black/40 p-4 rounded-2xl border border-white/5 shadow-inner">
                     <p className="text-[10px] font-mono leading-relaxed text-white/30 uppercase space-y-1">
@@ -2005,18 +2003,22 @@ export const UI: React.FC<UIProps> = ({
             )}
           </div>
         </div>
-      </aside>
+          </motion.aside>
+        )}
+      </AnimatePresence>
 
-      <button
-        style={{
-          right: sidebarOpen ? '345px' : '15px',
-          transition: 'right 0.5s ease-in-out'
-        }}
-        onClick={() => setSidebarOpen(!sidebarOpen)}
-        className="absolute top-1/2 -translate-y-1/2 z-50 bg-[#0a0a0a]/80 backdrop-blur-xl hover:bg-teal-500 text-white hover:text-black p-2 rounded-full border border-white/10 transition-all pointer-events-auto shadow-[0_15px_35px_rgba(0,0,0,0.5)] group"
-      >
-        {sidebarOpen ? <ChevronRight size={18} className="group-hover:scale-110 transition-transform" /> : <ChevronLeft size={18} className="group-hover:scale-110 transition-transform" />}
-      </button>
+      {isEditMode && (
+        <button
+          style={{
+            left: sidebarOpen ? '345px' : '15px',
+            transition: 'left 0.5s ease-in-out'
+          }}
+          onClick={() => setSidebarOpen(!sidebarOpen)}
+          className="absolute top-1/2 -translate-y-1/2 z-[60] bg-[#0a0a0a]/80 backdrop-blur-xl hover:bg-teal-500 text-white hover:text-black p-2 rounded-full border border-white/10 transition-all pointer-events-auto shadow-[0_15px_35px_rgba(0,0,0,0.5)] group"
+        >
+          {sidebarOpen ? <ChevronLeft size={18} className="group-hover:scale-110 transition-transform" /> : <ChevronRight size={18} className="group-hover:scale-110 transition-transform" />}
+        </button>
+      )}
 
       {/* Floorplan to SVG Modal */}
       <FloorplanToSvg
