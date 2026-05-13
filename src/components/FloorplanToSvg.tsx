@@ -780,6 +780,7 @@ export const FloorplanToSvg: React.FC<FloorplanToSvgProps> = ({ isOpen, onClose,
   const [selectedPathIds, setSelectedPathIds] = useState<Set<string>>(new Set());
   const [selectedPoints, setSelectedPoints] = useState<Set<string>>(new Set()); // "subIdx-ptIdx"
   const [highlightedPoints, setHighlightedPoints] = useState<Set<string>>(new Set());
+  const [highlightedPathIds, setHighlightedPathIds] = useState<Set<string>>(new Set());
   const [draggingPoint, setDraggingPoint] = useState(false);
   const [isPanning, setIsPanning] = useState(false);
   const [pan, setPan] = useState({ x: 0, y: 0 });
@@ -1579,14 +1580,14 @@ ${pathsSvg}
     }
 
     // 2. Deselect in Select Mode (Background click)
-    if (!editMode && drawTool === 'select') {
+    const isCtrl = e.ctrlKey || e.metaKey;
+    if (!editMode && drawTool === 'select' && !isCtrl) {
       setSelectedPathId(null);
       setSelectedPathIds(new Set());
       setSelectedPoints(new Set());
     }
 
-    if (!editMode && drawTool !== 'rect') return;
-    const isCtrl = e.ctrlKey || e.metaKey;
+    if (!editMode && drawTool !== 'rect' && !isCtrl) return;
 
     // 2. Rectangle draw tool (Priority over point editing)
     if (drawTool === 'rect') {
@@ -1595,86 +1596,86 @@ ${pathsSvg}
     }
 
     // 3. Point Editing Interactions (Only allowed in editMode)
-    if (!editMode) return;
-
-    const hitRadius = 10 / zoom;
-    const activePathId = selectedPathId || 'wall';
-    const wall = svgPaths.find(p => p.id === activePathId) || svgPaths[0];
-    if (!wall || wall.locked || wall.visible === false) return;
-
-    // Insert New Point if hovering over the segment guide
-    if (addNodeGuide && Math.sqrt((addNodeGuide.pt.x - svgPt.x) ** 2 + (addNodeGuide.pt.y - svgPt.y) ** 2) < hitRadius * 2) {
-      setSvgPaths(prev => {
-        const newPaths = prev.map(p => {
-          if (p.id !== (selectedPathId || 'wall') || p.locked || p.visible === false) return p;
-          const newSubPaths = p.subPaths.map((points, s) => {
-            if (s !== addNodeGuide.s) return points;
-            const pts = [...points];
-            pts.splice(addNodeGuide.i, 0, { x: addNodeGuide.pt.x, y: addNodeGuide.pt.y });
-            return pts;
-          });
-          return { ...p, subPaths: newSubPaths };
-        });
-        latestPathsRef.current = newPaths;
-        commitChange(newPaths);
-        return newPaths;
-      });
-      setSelectedPoints(new Set([`${addNodeGuide.s}-${addNodeGuide.i}`]));
-      setAddNodeGuide(null);
-      setDraggingPoint(true);
-      dragStartRef.current = { x: addNodeGuide.pt.x, y: addNodeGuide.pt.y };
-      dragInitialPosRef.current = { x: addNodeGuide.pt.x, y: addNodeGuide.pt.y };
-      shiftAxisRef.current = null;
-      return;
-    }
-
-    // Check Control Handles FIRST
-    for (let s = 0; s < wall.subPaths.length; s++) {
-      const points = wall.subPaths[s];
-      for (let i = 0; i < points.length; i++) {
-        const p = points[i];
-        if (p.bezier) {
-          const prevIdx = (i - 1 + points.length) % points.length;
-          const prev = points[prevIdx];
-          const c1Collapsed = Math.abs(p.bezier.cx1 - prev.x) < 0.5 && Math.abs(p.bezier.cy1 - prev.y) < 0.5;
-          const c2Collapsed = Math.abs(p.bezier.cx2 - p.x) < 0.5 && Math.abs(p.bezier.cy2 - p.y) < 0.5;
-
-          if (!c1Collapsed && Math.hypot(p.bezier.cx1 - svgPt.x, p.bezier.cy1 - svgPt.y) < hitRadius) {
-            setSelectedPoints(new Set([`${s}-${i}-c1`]));
-            setDraggingPoint(true); dragStartRef.current = { x: svgPt.x, y: svgPt.y }; dragInitialPosRef.current = { x: svgPt.x, y: svgPt.y }; shiftAxisRef.current = null; return;
-          }
-          if (!c2Collapsed && Math.hypot(p.bezier.cx2 - svgPt.x, p.bezier.cy2 - svgPt.y) < hitRadius) {
-            setSelectedPoints(new Set([`${s}-${i}-c2`]));
-            setDraggingPoint(true); dragStartRef.current = { x: svgPt.x, y: svgPt.y }; dragInitialPosRef.current = { x: svgPt.x, y: svgPt.y }; shiftAxisRef.current = null; return;
-          }
-        }
-      }
-    }
-
-    // Then check main points
-    for (let s = 0; s < wall.subPaths.length; s++) {
-      const points = wall.subPaths[s];
-      for (let i = 0; i < points.length; i++) {
-        const dx = points[i].x - svgPt.x;
-        const dy = points[i].y - svgPt.y;
-        if (Math.sqrt(dx * dx + dy * dy) < hitRadius) {
-          const key = `${s}-${i}`;
-          if (isCtrl) {
-            setSelectedPoints(prev => {
-              const next = new Set(prev);
-              if (next.has(key)) next.delete(key); else next.add(key);
-              return next;
+    if (editMode) {
+      const hitRadius = 10 / zoom;
+      const activePathId = selectedPathId || 'wall';
+      const wall = svgPaths.find(p => p.id === activePathId) || svgPaths[0];
+      if (wall && !wall.locked && wall.visible !== false) {
+        // Insert New Point if hovering over the segment guide
+        if (addNodeGuide && Math.sqrt((addNodeGuide.pt.x - svgPt.x) ** 2 + (addNodeGuide.pt.y - svgPt.y) ** 2) < hitRadius * 2) {
+          setSvgPaths(prev => {
+            const newPaths = prev.map(p => {
+              if (p.id !== (selectedPathId || 'wall') || p.locked || p.visible === false) return p;
+              const newSubPaths = p.subPaths.map((points, s) => {
+                if (s !== addNodeGuide.s) return points;
+                const pts = [...points];
+                pts.splice(addNodeGuide.i, 0, { x: addNodeGuide.pt.x, y: addNodeGuide.pt.y });
+                return pts;
+              });
+              return { ...p, subPaths: newSubPaths };
             });
-          } else {
-            if (!selectedPoints.has(key)) {
-              setSelectedPoints(new Set([key]));
-            }
-          }
+            latestPathsRef.current = newPaths;
+            commitChange(newPaths);
+            return newPaths;
+          });
+          setSelectedPoints(new Set([`${addNodeGuide.s}-${addNodeGuide.i}`]));
+          setAddNodeGuide(null);
           setDraggingPoint(true);
-          dragStartRef.current = { x: svgPt.x, y: svgPt.y };
-          dragInitialPosRef.current = { x: svgPt.x, y: svgPt.y };
+          dragStartRef.current = { x: addNodeGuide.pt.x, y: addNodeGuide.pt.y };
+          dragInitialPosRef.current = { x: addNodeGuide.pt.x, y: addNodeGuide.pt.y };
           shiftAxisRef.current = null;
           return;
+        }
+
+        // Check Control Handles FIRST
+        for (let s = 0; s < wall.subPaths.length; s++) {
+          const points = wall.subPaths[s];
+          for (let i = 0; i < points.length; i++) {
+            const p = points[i];
+            if (p.bezier) {
+              const prevIdx = (i - 1 + points.length) % points.length;
+              const prev = points[prevIdx];
+              const c1Collapsed = Math.abs(p.bezier.cx1 - prev.x) < 0.5 && Math.abs(p.bezier.cy1 - prev.y) < 0.5;
+              const c2Collapsed = Math.abs(p.bezier.cx2 - p.x) < 0.5 && Math.abs(p.bezier.cy2 - p.y) < 0.5;
+
+              if (!c1Collapsed && Math.hypot(p.bezier.cx1 - svgPt.x, p.bezier.cy1 - svgPt.y) < hitRadius) {
+                setSelectedPoints(new Set([`${s}-${i}-c1`]));
+                setDraggingPoint(true); dragStartRef.current = { x: svgPt.x, y: svgPt.y }; dragInitialPosRef.current = { x: svgPt.x, y: svgPt.y }; shiftAxisRef.current = null; return;
+              }
+              if (!c2Collapsed && Math.hypot(p.bezier.cx2 - svgPt.x, p.bezier.cy2 - svgPt.y) < hitRadius) {
+                setSelectedPoints(new Set([`${s}-${i}-c2`]));
+                setDraggingPoint(true); dragStartRef.current = { x: svgPt.x, y: svgPt.y }; dragInitialPosRef.current = { x: svgPt.x, y: svgPt.y }; shiftAxisRef.current = null; return;
+              }
+            }
+          }
+        }
+
+        // Then check main points
+        for (let s = 0; s < wall.subPaths.length; s++) {
+          const points = wall.subPaths[s];
+          for (let i = 0; i < points.length; i++) {
+            const dx = points[i].x - svgPt.x;
+            const dy = points[i].y - svgPt.y;
+            if (Math.sqrt(dx * dx + dy * dy) < hitRadius) {
+              const key = `${s}-${i}`;
+              if (isCtrl) {
+                setSelectedPoints(prev => {
+                  const next = new Set(prev);
+                  if (next.has(key)) next.delete(key); else next.add(key);
+                  return next;
+                });
+              } else {
+                if (!selectedPoints.has(key)) {
+                  setSelectedPoints(new Set([key]));
+                }
+              }
+              setDraggingPoint(true);
+              dragStartRef.current = { x: svgPt.x, y: svgPt.y };
+              dragInitialPosRef.current = { x: svgPt.x, y: svgPt.y };
+              shiftAxisRef.current = null;
+              return;
+            }
+          }
         }
       }
     }
@@ -1684,6 +1685,10 @@ ${pathsSvg}
       setSelectionBox({ x1: svgPt.x, y1: svgPt.y, x2: svgPt.x, y2: svgPt.y });
     } else {
       setSelectedPoints(new Set());
+      if (!editMode) {
+        setSelectedPathId(null);
+        setSelectedPathIds(new Set());
+      }
     }
   }, [editMode, svgPaths, zoom, selectedPoints, isSpacePressed, drawTool]);
 
@@ -2144,19 +2149,35 @@ ${pathsSvg}
       const yMin = Math.min(newBox.y1, newBox.y2);
       const yMax = Math.max(newBox.y1, newBox.y2);
 
-      const highlights = new Set<string>();
-      const activePathId2 = selectedPathId || 'wall';
-      const wall = svgPaths.find(p => p.id === activePathId2) || svgPaths[0];
-      if (wall && !wall.locked && wall.visible !== false) {
-        wall.subPaths.forEach((points, s) => {
-          points.forEach((pt, i) => {
-            if (pt.x >= xMin && pt.x <= xMax && pt.y >= yMin && pt.y <= yMax) {
-              highlights.add(`${s}-${i}`);
-            }
+      if (editMode) {
+        const highlights = new Set<string>();
+        const activePathId2 = selectedPathId || 'wall';
+        const wall = svgPaths.find(p => p.id === activePathId2) || svgPaths[0];
+        if (wall && !wall.locked && wall.visible !== false) {
+          wall.subPaths.forEach((points, s) => {
+            points.forEach((pt, i) => {
+              if (pt.x >= xMin && pt.x <= xMax && pt.y >= yMin && pt.y <= yMax) {
+                highlights.add(`${s}-${i}`);
+              }
+            });
           });
+        }
+        setHighlightedPoints(highlights);
+      } else {
+        // Multi-layer selection mode
+        const highlights = new Set<string>();
+        svgPaths.forEach(path => {
+          if (path.locked || path.visible === false) return;
+          let anyIn = false;
+          path.subPaths.forEach(pts => {
+            pts.forEach(pt => {
+              if (pt.x >= xMin && pt.x <= xMax && pt.y >= yMin && pt.y <= yMax) anyIn = true;
+            });
+          });
+          if (anyIn) highlights.add(path.id);
         });
+        setHighlightedPathIds(highlights);
       }
-      setHighlightedPoints(highlights);
       return;
     }
 
@@ -2282,11 +2303,22 @@ ${pathsSvg}
 
     // Process Drag Selection
     if (selectionBox) {
-      const newlySelected = new Set(selectedPoints);
-      highlightedPoints.forEach(p => newlySelected.add(p));
-      setSelectedPoints(newlySelected);
+      if (editMode) {
+        const newlySelected = new Set(selectedPoints);
+        highlightedPoints.forEach(p => newlySelected.add(p));
+        setSelectedPoints(newlySelected);
+      } else {
+        const newlySelectedIds = new Set(selectedPathIds);
+        highlightedPathIds.forEach(id => newlySelectedIds.add(id));
+        setSelectedPathIds(newlySelectedIds);
+        if (newlySelectedIds.size > 0) {
+          const idsArr = Array.from(newlySelectedIds);
+          setSelectedPathId(idsArr[idsArr.length - 1]);
+        }
+      }
       setSelectionBox(null);
       setHighlightedPoints(new Set());
+      setHighlightedPathIds(new Set());
     }
 
     if (draggingPoint) {
@@ -2300,7 +2332,7 @@ ${pathsSvg}
     setPerpPoint(null);
     dragStartRef.current = null;
     panStartRef.current = null;
-  }, [selectionBox, selectedPoints, highlightedPoints, draggingPoint, commitChange, rectDraw, svgPaths, draggingLayer, resizingLayer, draggingCornerRadius, rotatingLayer, isPanning]);
+  }, [selectionBox, selectedPoints, highlightedPoints, highlightedPathIds, draggingPoint, commitChange, rectDraw, svgPaths, draggingLayer, resizingLayer, draggingCornerRadius, rotatingLayer, isPanning, editMode, selectedPathIds, selectedPathId]);
 
   // Global listeners for mouse move/up in case they go outside SVG
   useEffect(() => {
@@ -3426,7 +3458,7 @@ ${pathsSvg}
                           )}
                           {/* Combined paths preview — render in reverse so top-of-list layer draws last (on top) */}
                           {[...svgPaths].reverse().filter(p => p.visible !== false).map(path => {
-                            const isSelected = selectedPathIds.has(path.id);
+                            const isSelected = selectedPathIds.has(path.id) || highlightedPathIds.has(path.id);
                             const pathData = getPathDataForRender(path);
                             const handlePathMouseDown = (e: React.MouseEvent) => {
                               if (editMode || drawTool === 'rect') return;
@@ -3443,7 +3475,7 @@ ${pathsSvg}
                                 dragStartRef.current = { x: svgPt.x, y: svgPt.y };
                                 dragInitialPosRef.current = { x: svgPt.x, y: svgPt.y };
                                 shiftAxisRef.current = null;
-                                setDraggingLayer(path.id);
+                                if (!(e.shiftKey || e.ctrlKey || e.metaKey)) setDraggingLayer(path.id);
                               }
                               if (e.shiftKey || e.ctrlKey || e.metaKey) {
                                 setSelectedPathIds(prev => {

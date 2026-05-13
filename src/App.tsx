@@ -1142,6 +1142,7 @@ export default function App() {
           shiftPressed={shiftPressed}
           ctrlPressed={ctrlPressed}
           showGizmos={showGizmos}
+          isEditMode={isEditMode}
           viewCenterRef={viewCenterRef}
           onUpdateState={(updates) => setState(prev => ({ ...prev, ...updates }))}
           onFitToSelection={(id) => { setFitTargetId(typeof id === 'string' ? id : null); setFitSignal(s => (s + 1) % 1000); }}

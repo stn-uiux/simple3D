@@ -47,6 +47,7 @@ interface SceneProps {
   onFitToSelection: (id?: string) => void;
   fitTargetId?: string | null;
   onFitFinish?: () => void;
+  isEditMode: boolean;
 }
 
 const BackgroundController = ({ state }: { state: AppState }) => {
@@ -1068,7 +1069,7 @@ function LightWithHelper({
 
 export const Scene = forwardRef<any, SceneProps>(({
   state, onSelect, onBoxSelect, onSelectSub, previewSelectedIds, selectedSubId,
-  onUpdate, onUpdateLight, onUpdateItems, onUpdateLights, onZoomChange, fitSignal, zoomRef, panRef, shiftPressed, ctrlPressed, showGizmos, onUpdateState, viewCenterRef, onFitToSelection, fitTargetId, onFitFinish
+  onUpdate, onUpdateLight, onUpdateItems, onUpdateLights, onZoomChange, fitSignal, zoomRef, panRef, shiftPressed, ctrlPressed, showGizmos, isEditMode, onUpdateState, viewCenterRef, onFitToSelection, fitTargetId, onFitFinish
 }, ref) => {
   const [inTransition, startTransition] = React.useTransition();
   const [currentPreset, setCurrentPreset] = useState(state.environment);
@@ -1410,7 +1411,7 @@ export const Scene = forwardRef<any, SceneProps>(({
           <LightWithHelper
             key={light.id}
             config={light}
-            showGizmos={showGizmos}
+            showGizmos={showGizmos && isEditMode}
             isSelected={state.selectedIds.includes(light.id)}
             onSelectLight={onSelect}
             onUpdateLight={onUpdateLight}
@@ -1471,12 +1472,14 @@ export const Scene = forwardRef<any, SceneProps>(({
         />
         <OverlayControlsLogic zoomRef={zoomRef} panRef={panRef} />
         <ZoomTracker />
-        <GroupGizmo
-          state={state}
-          onUpdateItems={onUpdateItems}
-          onUpdateLights={onUpdateLights}
-          setIsDragging={setIsDragging}
-        />
+        {isEditMode && (
+          <GroupGizmo
+            state={state}
+            onUpdateItems={onUpdateItems}
+            onUpdateLights={onUpdateLights}
+            setIsDragging={setIsDragging}
+          />
+        )}
 
         <Bounds margin={1.2}>
           <group>
@@ -1497,7 +1500,7 @@ export const Scene = forwardRef<any, SceneProps>(({
                   ctrlPressed={ctrlPressed}
                   registerMesh={registerMesh}
                   otherMeshes={otherMeshes}
-                  showGizmos={true}
+                  showGizmos={showGizmos && isEditMode}
                   customTextures={state.customTextures || []}
                   multiSelect={state.selectedIds.length > 1}
                   isLastSelected={state.selectedIds[state.selectedIds.length - 1] === item.id}
@@ -1543,11 +1546,13 @@ export const Scene = forwardRef<any, SceneProps>(({
           </mesh>
         )}
 
-        <GizmoHelper alignment="top-right" margin={[60, 60]} renderPriority={2}>
-
-          <GizmoViewport axisColors={['#FF4458', '#38CC15', '#3D8BFB']} labelColor="white" labels={['X', 'Y', 'Z']} />
-
-        </GizmoHelper>
+        {isEditMode && (
+          <GizmoHelper alignment="top-right" margin={[60, 140]} renderPriority={2}>
+            <group scale={0.8}>
+              <GizmoViewport axisColors={['#FF4458', '#38CC15', '#3D8BFB']} labelColor="white" labels={['X', 'Y', 'Z']} />
+            </group>
+          </GizmoHelper>
+        )}
 
         <EffectComposer multisampling={8} autoClear={false}>
           <N8AO aoRadius={0.3} intensity={4} distanceFalloff={2} halfRes={false} aoSamples={16} denoiseSamples={4} />
