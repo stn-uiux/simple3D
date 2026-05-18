@@ -1194,13 +1194,13 @@ export const FloorplanToSvg: React.FC<FloorplanToSvgProps> = ({ isOpen, onClose,
   }, [selectedPathIds, svgPaths, commitChange, t]);
 
   const groupLayers = useCallback(() => {
-    if (selectedPathIds.size < 2) return;
+    if (selectedPathIds.size < 1) return;
 
     setSvgPaths(prev => {
       const selected = prev.filter(p => selectedPathIds.has(p.id));
       const remaining = prev.filter(p => !selectedPathIds.has(p.id));
 
-      if (selected.length < 2) return prev;
+      if (selected.length < 1) return prev;
 
       // Find the topmost (lowest index) selected layer to insert at that position
       const firstSelectedIdx = prev.findIndex(p => selectedPathIds.has(p.id));
@@ -1208,7 +1208,7 @@ export const FloorplanToSvg: React.FC<FloorplanToSvgProps> = ({ isOpen, onClose,
       const first = selected[0];
       const merged: SvgPath = {
         id: `group-${Date.now()}`,
-        name: t('Grouped Layer', '그룹화된 레이어'),
+        name: 'area',
         subPaths: selected.flatMap(p => p.subPaths),
         closed: true,
         color: first.color,
@@ -1228,7 +1228,7 @@ export const FloorplanToSvg: React.FC<FloorplanToSvgProps> = ({ isOpen, onClose,
       setSelectedPathId(merged.id);
       return next;
     });
-  }, [selectedPathIds, commitChange, t]);
+  }, [selectedPathIds, commitChange]);
 
   const ungroupLayers = useCallback(() => {
     if (selectedPathIds.size === 0) return;
@@ -3171,9 +3171,9 @@ ${pathsSvg}
                             </div>
                           )}
 
-                          {(selectedPathIds.size >= 2 || Array.from(selectedPathIds).some(id => svgPaths.find(p => p.id === id)?.groupChildren)) && (
+                          {(selectedPathIds.size >= 1 || Array.from(selectedPathIds).some(id => svgPaths.find(p => p.id === id)?.groupChildren)) && (
                             <div className="grid grid-cols-2 gap-1.5 mt-2">
-                              {selectedPathIds.size >= 2 && (
+                              {selectedPathIds.size >= 1 && (
                                 <button onClick={groupLayers}
                                   className="flex items-center justify-center gap-2 py-2 rounded-xl border border-violet-500/20 bg-violet-500/10 text-violet-400 hover:bg-violet-500/20 text-[10px] font-black uppercase tracking-wider transition-all"
                                   title="Ctrl+G"
@@ -3222,7 +3222,7 @@ ${pathsSvg}
                                     <div className="space-y-1">
                                       <h4 className="text-[11px] font-black text-teal-400 uppercase tracking-wider">{t('How to create Areas', '구역(Area) 생성 방법')}</h4>
                                       <p className="text-[10px] text-white/60 leading-relaxed">
-                                        {t('Group paths and name the group "Area". Name the children layers to define specific zones.', '도형들을 그룹(Group)으로 묶고 그룹명을 "Area"로 지정하세요. 그룹 내부의 레이어명이 각 구역의 이름이 됩니다.')}
+                                        {t('Selecting 1 or more shapes and grouping them (Ctrl+G) automatically creates an "area" group, which is recognized as a monitoring zone in the 3D scene.', '1개 이상의 도형을 선택 후 그룹화(ctrl+G)를 하면 자동으로 area그룹이 생성되며 3D현장에 반영시 관제영역으로 인식 됩니다.')}
                                       </p>
                                     </div>
                                     <div className="space-y-1">
